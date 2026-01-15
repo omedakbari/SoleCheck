@@ -162,7 +162,13 @@
                 {% endif %}
               </div>
             {% endif %}
-
+            {% if result and result.metrics %}
+            <details style="margin-top:10px;">
+            <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Debug metrics</summary>
+            <pre style="white-space:pre-wrap; margin-top:8px;">{{ result.metrics }}</pre>
+            </details>
+            {% endif %}
+            
             <div style="margin-top:14px;">
               <small>
                 Disclaimer: This demo provides informational guidance and is not a medical diagnosis.
