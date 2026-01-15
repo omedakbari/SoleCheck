@@ -1,26 +1,160 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SoleCheck — Local Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SoleCheck — Demo</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <h1>SoleCheck — Local Demo</h1>
-  <form method="post" enctype="multipart/form-data">
-    <input type="file" name="image" accept="image/*" required />
-    <button type="submit">Analyze</button>
-  </form>
-  {% if error %}
-    <p style="color:red">{{ error }}</p>
-  {% endif %}
-  {% if overlay_data %}
-    <div>
-      <h2>Wear overlay</h2>
-      <img src="data:image/png;base64,{{ overlay_data }}" />
-      <h2>Analysis</h2>
-      <pre>{{ analysis_text }}</pre>
+  <div class="container">
+
+    <div class="nav">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>SoleCheck</div>
+      </div>
+      <div class="pills">
+        <div class="pill">Privacy-first</div>
+        <div class="pill">No login</div>
+        <div class="pill">Recruiter Demo</div>
+      </div>
     </div>
-  {% endif %}
+
+    <div class="hero">
+      <!-- Left: pitch + value -->
+      <div class="card">
+        <div class="cardHeader">
+          <div class="badge">AI gait insights from outsole wear</div>
+          <h1 class="h1">Upload a shoe-sole photo.<br/>Get a wear-pattern readout.</h1>
+          <p class="sub">
+            SoleCheck analyzes outsole wear to surface likely gait tendencies and practical shoe guidance.
+            Built for a fast, explainable demo — not a medical diagnosis.
+          </p>
+
+          <div class="ctaRow">
+            <a class="btn btnPrimary" href="#demo">Try the demo</a>
+            <a class="btn" href="https://github.com/omedakbari/SoleCheck" target="_blank" rel="noreferrer">View code</a>
+          </div>
+
+          <div class="footer">
+            <div>Tip: first load may take a moment (free hosting cold start).</div>
+            <div>© {{ (now.year if now else "") }}</div>
+          </div>
+        </div>
+        <div class="cardBody">
+          <div class="grid2">
+            <div>
+              <div class="kv">
+                <div class="k">Input</div>
+                <div class="v">One outsole photo (jpg/png). Clear lighting is best.</div>
+              </div>
+              <div class="kv">
+                <div class="k">Output</div>
+                <div class="v">Wear pattern + short explanation + simple recommendation.</div>
+              </div>
+              <div class="kv">
+                <div class="k">Privacy</div>
+                <div class="v">No account required. Demo stores no user profiles.</div>
+              </div>
+            </div>
+            <div>
+              <div class="kv">
+                <div class="k">Use cases</div>
+                <div class="v">Product analytics, retail fit guidance, health/ergonomics signal exploration.</div>
+              </div>
+              <div class="kv">
+                <div class="k">Tech</div>
+                <div class="v">Flask + OpenCV preprocessing + lightweight rules/ML logic (demo-ready).</div>
+              </div>
+              <div class="kv">
+                <div class="k">Note</div>
+                <div class="v">Not medical advice — informational guidance only.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: demo card -->
+      <div class="card" id="demo">
+        <div class="cardHeader">
+          <h2 style="margin:10px 0 6px; font-size:18px;">Live Demo</h2>
+          <p class="sub" style="margin-bottom:10px;">
+            Drag & drop a sole image or choose a file. Then click Analyze.
+          </p>
+        </div>
+
+        <div class="cardBody">
+          <form method="POST" enctype="multipart/form-data" style="margin:0;">
+            <div id="dropzone" class="drop">
+              <div>
+                <div class="dropStrong">Drop image here</div>
+                <div style="margin-top:6px;">or click “Choose file” below</div>
+              </div>
+            </div>
+
+            <img id="preview" class="preview" alt="preview"/>
+
+            <div class="fileRow">
+              <div>
+                <input id="image" name="image" type="file" accept="image/*" />
+              </div>
+              <div class="fileName" id="fileName">No file selected</div>
+            </div>
+
+            <div class="ctaRow" style="margin-top:14px;">
+              <button id="analyzeBtn" class="btn btnSuccess" type="submit" disabled>Analyze</button>
+              <a class="btn" href="/" style="opacity:0.9;">Reset</a>
+            </div>
+
+            {% if error %}
+              <div class="alert">{{ error }}</div>
+            {% endif %}
+
+            {% if result %}
+              <div style="margin-top:16px;">
+                <div class="badge">Results</div>
+
+                <div class="kv">
+                  <div class="k">Pattern</div>
+                  <div class="v"><b>{{ result.pattern }}</b></div>
+                </div>
+
+                {% if result.confidence is not none %}
+                <div class="kv">
+                  <div class="k">Confidence</div>
+                  <div class="v">{{ (result.confidence * 100) | round(0) }}%</div>
+                </div>
+                {% endif %}
+
+                {% if result.summary %}
+                <div class="kv">
+                  <div class="k">Summary</div>
+                  <div class="v">{{ result.summary }}</div>
+                </div>
+                {% endif %}
+
+                {% if result.recommendation %}
+                <div class="kv">
+                  <div class="k">Recommendation</div>
+                  <div class="v">{{ result.recommendation }}</div>
+                </div>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            <div style="margin-top:14px;">
+              <small>
+                Disclaimer: This demo provides informational guidance and is not a medical diagnosis.
+              </small>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
