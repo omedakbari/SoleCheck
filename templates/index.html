@@ -98,7 +98,13 @@
 
             <div class="fileRow">
               <div>
-                <input id="image" name="image" type="file" accept="image/*" />
+                <input
+                  id="image"
+                  name="image"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"/>
+                <small>On mobile, tapping “Choose file” will open your camera (or photo library).</small>
               </div>
               <div class="fileName" id="fileName">No file selected</div>
             </div>
