@@ -1,3 +1,5 @@
+<!-- templates/index.html -->
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -28,7 +30,7 @@
           <div class="badge">Gait insights from outsole wear</div>
           <h1 class="h1">Upload a shoe-sole photo.<br/>Get a wear-pattern readout.</h1>
           <p class="sub">
-             SoleCheck analyzes outsole wear to surface likely gait tendencies and practical shoe guidance.
+            SoleCheck analyzes outsole wear to surface likely gait tendencies and practical shoe guidance.
             Built as a fast, explainable demo — not a medical diagnosis.
           </p>
 
@@ -47,25 +49,25 @@
             <div>
               <div class="kv">
                 <div class="k">Input</div>
-                <div class="v">One outsole photo (jpg/png). Clear lighting is best.</div>
+                <div class="v">One outsole photo (jpg/png/webp). Clear lighting is best.</div>
               </div>
               <div class="kv">
                 <div class="k">Output</div>
-                <div class="v">Wear pattern + short explanation + simple recommendation.</div>
+                <div class="v">Wear evidence overlay + metrics + simple recommendation.</div>
               </div>
               <div class="kv">
                 <div class="k">Privacy</div>
-                <div class="v">No account required. Demo stores no user profiles.</div>
+                <div class="v">No login required. Demo stores no user profiles.</div>
               </div>
             </div>
             <div>
               <div class="kv">
-                <div class="k">Use cases</div>
-                <div class="v">Retail fit guidance, customer insights, and a fast visual diagnostic-style demo.</div>
+                <div class="k">Explainability</div>
+                <div class="v">Highlights smoother (lower-texture) zones as wear evidence.</div>
               </div>
               <div class="kv">
                 <div class="k">Tech</div>
-                <div class="v">Flask + OpenCV preprocessing + structured wear-pattern analysis (demo-ready).</div>
+                <div class="v">Flask + OpenCV mask + alignment + metric-based wear scoring.</div>
               </div>
               <div class="kv">
                 <div class="k">Note</div>
@@ -98,15 +100,28 @@
 
             <div class="fileRow">
               <div>
-                <input
-                  id="image"
-                  name="image"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"/>
-                <small>On mobile, tapping “Choose file” will open your camera (or photo library).</small>
+                <input id="image" name="image" type="file" accept="image/*" />
               </div>
               <div class="fileName" id="fileName">No file selected</div>
+            </div>
+
+            <!-- Left/Right toggle (improves medial/lateral correctness) -->
+            <div class="kv" style="margin-top:10px; border-bottom:none;">
+              <div class="k">Shoe side</div>
+              <div class="v" style="display:flex; gap:12px; flex-wrap:wrap;">
+                <label style="display:flex; gap:6px; align-items:center;">
+                  <input type="radio" name="shoe_side" value="unknown" checked />
+                  Unknown
+                </label>
+                <label style="display:flex; gap:6px; align-items:center;">
+                  <input type="radio" name="shoe_side" value="left" />
+                  Left shoe
+                </label>
+                <label style="display:flex; gap:6px; align-items:center;">
+                  <input type="radio" name="shoe_side" value="right" />
+                  Right shoe
+                </label>
+              </div>
             </div>
 
             <div class="ctaRow" style="margin-top:14px;">
@@ -123,7 +138,7 @@
                 <div class="badge">Results</div>
 
                 {% if overlay_data %}
-                  <img class="preview show" alt="overlay" src="data:image/png;base64,{{ overlay_data }}" />
+                  <img class="preview show" alt="wear overlay" src="data:image/png;base64,{{ overlay_data }}" />
                 {% endif %}
 
                 {% if result %}
@@ -159,16 +174,17 @@
                       <div class="v">{{ result.shoes }}</div>
                     </div>
                   {% endif %}
+
+                  {% if result.metrics %}
+                    <details style="margin-top:10px;">
+                      <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Metrics (debug)</summary>
+                      <pre style="white-space:pre-wrap; margin-top:8px;">{{ result.metrics }}</pre>
+                    </details>
+                  {% endif %}
                 {% endif %}
               </div>
             {% endif %}
-            {% if result and result.metrics %}
-            <details style="margin-top:10px;">
-            <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Debug metrics</summary>
-            <pre style="white-space:pre-wrap; margin-top:8px;">{{ result.metrics }}</pre>
-            </details>
-            {% endif %}
-            
+
             <div style="margin-top:14px;">
               <small>
                 Disclaimer: This demo provides informational guidance and is not a medical diagnosis.
