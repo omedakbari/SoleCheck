@@ -1,5 +1,3 @@
-<!-- templates/index.html -->
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -10,7 +8,6 @@
 </head>
 <body>
   <div class="container">
-
     <div class="nav">
       <div class="brand">
         <div class="logo"></div>
@@ -24,50 +21,52 @@
     </div>
 
     <div class="hero">
-      <!-- Left: pitch + value -->
+      <!-- Left: pitch -->
       <div class="card">
         <div class="cardHeader">
-          <div class="badge">Gait insights from outsole wear</div>
-          <h1 class="h1">Upload a shoe-sole photo.<br/>Get a wear-pattern readout.</h1>
+          <div class="badge">Explainable outsole wear analysis</div>
+          <h1 class="h1">Upload outsole photos.<br/>Get a wear readout + evidence.</h1>
           <p class="sub">
-            SoleCheck analyzes outsole wear to surface likely gait tendencies and practical shoe guidance.
-            Built as a fast, explainable demo — not a medical diagnosis.
+            SoleCheck highlights smoother (lower-detail) regions as wear evidence, aligns the sole for consistent
+            comparisons, and produces a metric-based summary. Informational guidance only — not medical advice.
           </p>
 
           <div class="ctaRow">
             <a class="btn btnPrimary" href="#demo">Try the demo</a>
-            <a class="btn" href="https://github.com/omedakbari/SoleCheck" target="_blank" rel="noreferrer">View code</a>
+            <a class="btn" href="/sample">Run sample (single)</a>
+            <a class="btn" href="/sample_pair">Run sample (pair)</a>
           </div>
 
           <div class="footer">
-            <div>Tip: first load may take a moment (free hosting cold start).</div>
-            <div>© {{ (now.year if now else "") }}</div>
+            <div>Tip: Samples work great for recruiters without shoe photos.</div>
+            <div>© SoleCheck</div>
           </div>
         </div>
+
         <div class="cardBody">
           <div class="grid2">
             <div>
               <div class="kv">
-                <div class="k">Input</div>
-                <div class="v">One outsole photo (jpg/png/webp). Clear lighting is best.</div>
+                <div class="k">Modes</div>
+                <div class="v">Single shoe or left+right pair with asymmetry comparison.</div>
               </div>
               <div class="kv">
-                <div class="k">Output</div>
-                <div class="v">Wear evidence overlay + metrics + simple recommendation.</div>
+                <div class="k">Evidence</div>
+                <div class="v">Wear heatmap + outsole contour for interpretability.</div>
               </div>
               <div class="kv">
                 <div class="k">Privacy</div>
-                <div class="v">No login required. Demo stores no user profiles.</div>
+                <div class="v">No accounts. Optional logging stores metrics only (no images).</div>
               </div>
             </div>
             <div>
               <div class="kv">
-                <div class="k">Explainability</div>
-                <div class="v">Highlights smoother (lower-texture) zones as wear evidence.</div>
+                <div class="k">Personalization</div>
+                <div class="v">Activity, weekly mileage, and surface inform recommendations.</div>
               </div>
               <div class="kv">
-                <div class="k">Tech</div>
-                <div class="v">Flask + OpenCV mask + alignment + metric-based wear scoring.</div>
+                <div class="k">Downloads</div>
+                <div class="v">Export overlay PNG + JSON metrics + ZIP bundle.</div>
               </div>
               <div class="kv">
                 <div class="k">Note</div>
@@ -78,49 +77,110 @@
         </div>
       </div>
 
-      <!-- Right: demo card -->
+      <!-- Right: demo -->
       <div class="card" id="demo">
         <div class="cardHeader">
           <h2 style="margin:10px 0 6px; font-size:18px;">Live Demo</h2>
           <p class="sub" style="margin-bottom:10px;">
-            Drag & drop a sole image or choose a file. Then click Analyze.
+            Choose Single or Pair. Upload outsole photo(s) and analyze.
           </p>
         </div>
 
         <div class="cardBody">
-          <form method="POST" enctype="multipart/form-data" style="margin:0;">
-            <div id="dropzone" class="drop">
-              <div>
-                <div class="dropStrong">Drop image here</div>
-                <div style="margin-top:6px;">or click “Choose file” below</div>
-              </div>
-            </div>
-
-            <img id="preview" class="preview" alt="preview"/>
-
-            <div class="fileRow">
-              <div>
-                <input id="image" name="image" type="file" accept="image/*" />
-              </div>
-              <div class="fileName" id="fileName">No file selected</div>
-            </div>
-
-            <!-- Left/Right toggle (improves medial/lateral correctness) -->
-            <div class="kv" style="margin-top:10px; border-bottom:none;">
-              <div class="k">Shoe side</div>
+          <form id="demoForm" method="POST" action="/analyze" enctype="multipart/form-data" style="margin:0;">
+            <!-- Mode toggle -->
+            <div class="kv" style="border-bottom:none; padding-bottom:6px;">
+              <div class="k">Mode</div>
               <div class="v" style="display:flex; gap:12px; flex-wrap:wrap;">
-                <label style="display:flex; gap:6px; align-items:center;">
-                  <input type="radio" name="shoe_side" value="unknown" checked />
-                  Unknown
-                </label>
-                <label style="display:flex; gap:6px; align-items:center;">
-                  <input type="radio" name="shoe_side" value="left" />
-                  Left shoe
-                </label>
-                <label style="display:flex; gap:6px; align-items:center;">
-                  <input type="radio" name="shoe_side" value="right" />
-                  Right shoe
-                </label>
+                <label class="radio"><input type="radio" name="mode" value="single" checked> Single</label>
+                <label class="radio"><input type="radio" name="mode" value="pair"> Pair (L+R)</label>
+              </div>
+            </div>
+
+            <!-- Personalization -->
+            <div class="grid2" style="margin-top:6px;">
+              <div class="kv" style="border-bottom:none;">
+                <div class="k">Activity</div>
+                <div class="v">
+                  <select name="activity" class="select">
+                    <option value="walking">Walking</option>
+                    <option value="running">Running</option>
+                    <option value="basketball">Basketball</option>
+                    <option value="training">Training</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="kv" style="border-bottom:none;">
+                <div class="k">Surface</div>
+                <div class="v">
+                  <select name="surface" class="select">
+                    <option value="mixed">Mixed</option>
+                    <option value="indoor">Indoor</option>
+                    <option value="outdoor">Outdoor</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="kv" style="border-bottom:none; padding-top:0;">
+              <div class="k">Weekly miles</div>
+              <div class="v">
+                <select name="weekly_miles" class="select">
+                  <option value="unknown">Unknown</option>
+                  <option value="0-5">0–5</option>
+                  <option value="5-15">5–15</option>
+                  <option value="15-30">15–30</option>
+                  <option value="30+">30+</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Single block -->
+            <div id="singleBlock" class="block">
+              <div class="kv" style="border-bottom:none;">
+                <div class="k">Shoe side</div>
+                <div class="v" style="display:flex; gap:12px; flex-wrap:wrap;">
+                  <label class="radio"><input type="radio" name="shoe_side" value="unknown" checked> Unknown</label>
+                  <label class="radio"><input type="radio" name="shoe_side" value="left"> Left shoe</label>
+                  <label class="radio"><input type="radio" name="shoe_side" value="right"> Right shoe</label>
+                </div>
+              </div>
+
+              <div class="drop mini">
+                <div>
+                  <div class="dropStrong">Single shoe upload</div>
+                  <div style="margin-top:6px;">Outsole photo (jpg/png/webp)</div>
+                </div>
+              </div>
+              <input id="image1" name="image1" type="file" accept="image/*" capture="environment" />
+              <div class="fileName" id="fileName1">No file selected</div>
+
+              <img id="preview1" class="preview" alt="preview1"/>
+            </div>
+
+            <!-- Pair block -->
+            <div id="pairBlock" class="block" style="display:none;">
+              <div class="drop mini">
+                <div>
+                  <div class="dropStrong">Pair upload</div>
+                  <div style="margin-top:6px;">Left outsole + Right outsole</div>
+                </div>
+              </div>
+
+              <div class="grid2" style="margin-top:10px;">
+                <div>
+                  <label class="k" style="display:block; margin-bottom:6px;">Left shoe photo</label>
+                  <input id="imageLeft" name="image_left" type="file" accept="image/*" capture="environment" />
+                  <div class="fileName" id="fileNameL">No file selected</div>
+                  <img id="previewL" class="preview" alt="previewL"/>
+                </div>
+                <div>
+                  <label class="k" style="display:block; margin-bottom:6px;">Right shoe photo</label>
+                  <input id="imageRight" name="image_right" type="file" accept="image/*" capture="environment" />
+                  <div class="fileName" id="fileNameR">No file selected</div>
+                  <img id="previewR" class="preview" alt="previewR"/>
+                </div>
               </div>
             </div>
 
@@ -129,66 +189,136 @@
               <a class="btn" href="/" style="opacity:0.9;">Reset</a>
             </div>
 
+            <div id="loading" class="loading" style="display:none;">
+              <div class="spinner"></div>
+              <div>Analyzing…</div>
+            </div>
+
             {% if error %}
               <div class="alert">{{ error }}</div>
             {% endif %}
 
-            {% if overlay_data or result %}
+            {% if view %}
               <div style="margin-top:16px;">
                 <div class="badge">Results</div>
 
-                {% if overlay_data %}
-                  <img class="preview show" alt="wear overlay" src="data:image/png;base64,{{ overlay_data }}" />
-                {% endif %}
+                <div class="downloadRow">
+                  <a class="btn" href="{{ view.download.result_json }}">Download JSON</a>
+                  <a class="btn" href="{{ view.download.bundle_zip }}">Download ZIP</a>
+                </div>
 
-                {% if result %}
-                  <div class="kv">
-                    <div class="k">Pattern</div>
-                    <div class="v"><b>{{ result.pattern }}</b></div>
+                {% if view.mode == "single" %}
+                  <div class="resultsGrid">
+                    <div>
+                      {% if view.overlay_left_b64 %}
+                        <img class="preview show" alt="overlay" src="data:image/png;base64,{{ view.overlay_left_b64 }}" />
+                        <div class="downloadRow">
+                          <a class="btn" href="{{ view.download.overlay_left }}">Download overlay</a>
+                        </div>
+                      {% endif %}
+                    </div>
+
+                    <div>
+                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.single.pattern }}</b></div></div>
+                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.single.confidence * 100) | round(0) }}%</div></div>
+
+                      <div class="kv">
+                        <div class="k">What it suggests</div>
+                        <div class="v">
+                          <ul style="margin:0; padding-left:18px;">
+                            {% for item in view.single.summary.split(' | ') %}
+                              <li>{{ item }}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div class="kv"><div class="k">Recommendation</div><div class="v">{{ view.single.recommendation }}</div></div>
+                      <div class="kv"><div class="k">Shoes</div><div class="v">{{ view.single.shoes }}</div></div>
+
+                      <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.single.metrics }}</pre>
+                      </details>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="resultsGrid">
+                    <div>
+                      <div class="badge" style="margin-bottom:10px;">Left shoe</div>
+                      {% if view.overlay_left_b64 %}
+                        <img class="preview show" alt="left overlay" src="data:image/png;base64,{{ view.overlay_left_b64 }}" />
+                        <div class="downloadRow">
+                          <a class="btn" href="{{ view.download.overlay_left }}">Download left overlay</a>
+                        </div>
+                      {% endif %}
+                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.pair.left.pattern }}</b></div></div>
+                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.pair.left.confidence * 100) | round(0) }}%</div></div>
+
+                      <div class="kv">
+                        <div class="k">What it suggests</div>
+                        <div class="v">
+                          <ul style="margin:0; padding-left:18px;">
+                            {% for item in view.pair.left.summary.split(' | ') %}
+                              <li>{{ item }}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Left metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.left.metrics }}</pre>
+                      </details>
+                    </div>
+
+                    <div>
+                      <div class="badge" style="margin-bottom:10px;">Right shoe</div>
+                      {% if view.overlay_right_b64 %}
+                        <img class="preview show" alt="right overlay" src="data:image/png;base64,{{ view.overlay_right_b64 }}" />
+                        <div class="downloadRow">
+                          <a class="btn" href="{{ view.download.overlay_right }}">Download right overlay</a>
+                        </div>
+                      {% endif %}
+                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.pair.right.pattern }}</b></div></div>
+                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.pair.right.confidence * 100) | round(0) }}%</div></div>
+
+                      <div class="kv">
+                        <div class="k">What it suggests</div>
+                        <div class="v">
+                          <ul style="margin:0; padding-left:18px;">
+                            {% for item in view.pair.right.summary.split(' | ') %}
+                              <li>{{ item }}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <details style="margin-top:10px;">
+                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Right metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.right.metrics }}</pre>
+                      </details>
+                    </div>
                   </div>
 
-                  {% if result.confidence is not none %}
-                    <div class="kv">
-                      <div class="k">Confidence</div>
-                      <div class="v">{{ (result.confidence * 100) | round(0) }}%</div>
+                  <div class="card" style="margin-top:14px;">
+                    <div class="cardBody">
+                      <div class="badge">Pair comparison</div>
+                      <div class="kv"><div class="k">Summary</div><div class="v">{{ view.pair.pair_summary }}</div></div>
+                      {% if view.pair.pair_metrics %}
+                        <details style="margin-top:10px;">
+                          <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Pair metrics</summary>
+                          <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.pair_metrics }}</pre>
+                        </details>
+                      {% endif %}
                     </div>
-                  {% endif %}
-
-                  {% if result.summary %}
-                    <div class="kv">
-                      <div class="k">Summary</div>
-                      <div class="v">{{ result.summary }}</div>
-                    </div>
-                  {% endif %}
-
-                  {% if result.recommendation %}
-                    <div class="kv">
-                      <div class="k">Recommendation</div>
-                      <div class="v">{{ result.recommendation }}</div>
-                    </div>
-                  {% endif %}
-
-                  {% if result.shoes %}
-                    <div class="kv">
-                      <div class="k">Recommended shoes</div>
-                      <div class="v">{{ result.shoes }}</div>
-                    </div>
-                  {% endif %}
-
-                  {% if result.metrics %}
-                    <details style="margin-top:10px;">
-                      <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Metrics (debug)</summary>
-                      <pre style="white-space:pre-wrap; margin-top:8px;">{{ result.metrics }}</pre>
-                    </details>
-                  {% endif %}
+                  </div>
                 {% endif %}
               </div>
             {% endif %}
 
             <div style="margin-top:14px;">
-              <small>
-                Disclaimer: This demo provides informational guidance and is not a medical diagnosis.
-              </small>
+              <small>Disclaimer: informational guidance only; not a medical diagnosis.</small>
             </div>
           </form>
         </div>
