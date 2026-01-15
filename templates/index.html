@@ -112,34 +112,47 @@
               <div class="alert">{{ error }}</div>
             {% endif %}
 
-            {% if result %}
+            {% if overlay_data or result %}
               <div style="margin-top:16px;">
                 <div class="badge">Results</div>
 
-                <div class="kv">
-                  <div class="k">Pattern</div>
-                  <div class="v"><b>{{ result.pattern }}</b></div>
-                </div>
-
-                {% if result.confidence is not none %}
-                <div class="kv">
-                  <div class="k">Confidence</div>
-                  <div class="v">{{ (result.confidence * 100) | round(0) }}%</div>
-                </div>
+                {% if overlay_data %}
+                  <img class="preview show" alt="overlay" src="data:image/png;base64,{{ overlay_data }}" />
                 {% endif %}
 
-                {% if result.summary %}
-                <div class="kv">
-                  <div class="k">Summary</div>
-                  <div class="v">{{ result.summary }}</div>
-                </div>
-                {% endif %}
+                {% if result %}
+                  <div class="kv">
+                    <div class="k">Pattern</div>
+                    <div class="v"><b>{{ result.pattern }}</b></div>
+                  </div>
 
-                {% if result.recommendation %}
-                <div class="kv">
-                  <div class="k">Recommendation</div>
-                  <div class="v">{{ result.recommendation }}</div>
-                </div>
+                  {% if result.confidence is not none %}
+                    <div class="kv">
+                      <div class="k">Confidence</div>
+                      <div class="v">{{ (result.confidence * 100) | round(0) }}%</div>
+                    </div>
+                  {% endif %}
+
+                  {% if result.summary %}
+                    <div class="kv">
+                      <div class="k">Summary</div>
+                      <div class="v">{{ result.summary }}</div>
+                    </div>
+                  {% endif %}
+
+                  {% if result.recommendation %}
+                    <div class="kv">
+                      <div class="k">Recommendation</div>
+                      <div class="v">{{ result.recommendation }}</div>
+                    </div>
+                  {% endif %}
+
+                  {% if result.shoes %}
+                    <div class="kv">
+                      <div class="k">Recommended shoes</div>
+                      <div class="v">{{ result.shoes }}</div>
+                    </div>
+                  {% endif %}
                 {% endif %}
               </div>
             {% endif %}
