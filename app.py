@@ -1,10 +1,14 @@
+# app.py
 import os
 from flask import Flask, request, render_template
-from PIL import Image
+from PIL import Image, ImageFile
 from analyzer import analyze
 
 ALLOWED = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 MAX_BYTES = 10 * 1024 * 1024
+
+# Helps avoid failures on slightly corrupted uploads
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 app = Flask(__name__)
 
@@ -16,7 +20,7 @@ def healthz():
 def index():
     error = None
     overlay_data = None
-    analysis_text = ""
+    result = None
 
     if request.method == "POST":
         file = request.files.get("image")
@@ -32,7 +36,7 @@ def index():
             else:
                 try:
                     image = Image.open(file.stream)
-                    overlay_data, analysis_text = analyze(image)
+                    overlay_data, result = analyze(image)
                 except Exception as e:
                     error = f"Failed to process image: {e}"
 
@@ -40,11 +44,9 @@ def index():
         "index.html",
         error=error,
         overlay_data=overlay_data,
-        analysis_text=analysis_text
+        result=result
     )
 
 if __name__ == "__main__":
-    # Local run: python3 app.py
-    # Render/gunicorn ignores this block, but it doesn't hurt.
     port = int(os.environ.get("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=False)
