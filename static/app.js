@@ -1,3 +1,5 @@
+// static/app.js
+
 const fileInput = document.getElementById("image");
 const fileName = document.getElementById("fileName");
 const preview = document.getElementById("preview");
