@@ -1,10 +1,25 @@
-# analyzer.py
+# analyzer.py  (COPY/PASTE WHOLE FILE)
+# Adds a photo-quality gate: blur + lighting + "sole found" confidence.
+# Keeps the same analyze() signature: returns (overlay_b64, result_dict)
+
 from PIL import Image
 import numpy as np
 import cv2
 import base64
 
 MAX_SIDE = 1100  # speed/latency knob
+
+# --- Quality gate thresholds (tweak if needed) ---
+# Blur: variance of Laplacian. Lower = blurrier.
+BLUR_VAR_MIN = 60.0
+
+# Lighting: grayscale mean.
+DARK_MEAN_MIN = 45.0
+BRIGHT_MEAN_MAX = 210.0
+
+# Sole detection confidence gate (based on mask area fraction)
+SOLE_CONF_MIN = 0.15
+
 
 def _resize_bgr(bgr: np.ndarray, max_side: int = MAX_SIDE) -> np.ndarray:
     h, w = bgr.shape[:2]
@@ -16,12 +31,13 @@ def _resize_bgr(bgr: np.ndarray, max_side: int = MAX_SIDE) -> np.ndarray:
     new_h = max(1, int(h * scale))
     return cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
+
 def _sole_mask(gray: np.ndarray) -> np.ndarray:
     # blur + Otsu + morph close + largest contour
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, bw = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Ensure the sole is foreground (white). If the thresholded image is mostly white, invert.
+    # Ensure the sole is foreground (white). If thresholded image is mostly white, invert.
     if float(np.mean(bw)) > 127.0:
         bw = cv2.bitwise_not(bw)
 
@@ -37,6 +53,41 @@ def _sole_mask(gray: np.ndarray) -> np.ndarray:
     cv2.drawContours(mask, [c], -1, 255, thickness=cv2.FILLED)
     return mask
 
+
+def _quality_checks(gray: np.ndarray) -> dict:
+    """
+    Returns:
+      dict with keys:
+        ok (bool)
+        reasons (list[str])
+        metrics (dict)
+    """
+    reasons = []
+
+    # Blur check (variance of Laplacian)
+    lap = cv2.Laplacian(gray, cv2.CV_64F)
+    blur_var = float(lap.var())
+    if blur_var < BLUR_VAR_MIN:
+        reasons.append("Image looks blurry (low detail).")
+
+    # Lighting check
+    mean_brightness = float(gray.mean())
+    if mean_brightness < DARK_MEAN_MIN:
+        reasons.append("Image looks too dark.")
+    elif mean_brightness > BRIGHT_MEAN_MAX:
+        reasons.append("Image looks too bright / washed out.")
+
+    ok = (len(reasons) == 0)
+    return {
+        "ok": ok,
+        "reasons": reasons,
+        "metrics": {
+            "blur_var": round(blur_var, 2),
+            "mean_brightness": round(mean_brightness, 2),
+        }
+    }
+
+
 def analyze(image_pil: Image.Image):
     """
     Returns:
@@ -49,6 +100,23 @@ def analyze(image_pil: Image.Image):
     bgr = _resize_bgr(bgr)
 
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+    # ---- (1) Photo-quality gate: blur + lighting ----
+    qc = _quality_checks(gray)
+    if not qc["ok"]:
+        result = {
+            "pattern": "Retake photo",
+            "confidence": 0.0,
+            "summary": " ".join(qc["reasons"]),
+            "recommendation": (
+                "Try: bright even lighting, fill the frame with the sole, and hold steady."
+            ),
+            "shoes": "—",
+            "metrics": qc["metrics"],
+        }
+        return None, result
+
+    # ---- (2) Sole detection + confidence ----
     mask = _sole_mask(gray)
 
     h, w = gray.shape[:2]
@@ -56,45 +124,43 @@ def analyze(image_pil: Image.Image):
     img_area = float(h * w)
     area_frac = (mask_area / img_area) if img_area else 0.0
 
-    # Confidence heuristic: mask present + decent size
-    # ramps up from 5% to 35% of image area
-    confidence = 0.0
-    if area_frac > 0:
-        confidence = max(0.0, min(1.0, (area_frac - 0.05) / (0.35 - 0.05)))
+    # Confidence heuristic: ramps up from 5% to 35% mask coverage
+    confidence = max(0.0, min(1.0, (area_frac - 0.05) / (0.35 - 0.05)))
 
-    # If mask too small, return early guidance (better UX + avoids generic output)
-    if confidence < 0.15:
+    if confidence < SOLE_CONF_MIN:
         result = {
-            "pattern": "Unable to confidently detect sole",
+            "pattern": "Retake photo",
             "confidence": round(confidence, 2),
-            "summary": "Try a clearer outsole photo: fill the frame, good lighting, flat angle.",
-            "recommendation": "Retake photo with the sole centered and closer.",
+            "summary": "Couldn’t confidently isolate the sole from the background.",
+            "recommendation": (
+                "Center the sole, move closer so it fills most of the frame, and use a plain background."
+            ),
             "shoes": "—",
-            "metrics": {"mask_area_frac": round(area_frac, 3)},
+            "metrics": {
+                **qc["metrics"],
+                "mask_area_frac": round(area_frac, 3),
+            },
         }
         return None, result
 
-    # Region splits (on height)
+    # ---- Main analysis (same logic style, but based on texture proxy) ----
     f_end = int(0.30 * h)
     m_end = int(0.70 * h)
 
-    # Use texture proxy instead of brightness:
-    # Wear tends to reduce texture/contrast. Laplacian magnitude is a cheap proxy.
-    lap = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
-    lap = cv2.convertScaleAbs(lap)
+    # Texture proxy: wear tends to reduce texture
+    lap_tex = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
+    lap_tex = cv2.convertScaleAbs(lap_tex)
 
     def masked_mean(arr, m):
-        # cv2.mean returns (mean,0,0,0) for single-channel
         return cv2.mean(arr, mask=m)[0]
 
-    fore = masked_mean(lap[:f_end, :], mask[:f_end, :])
-    mid  = masked_mean(lap[f_end:m_end, :], mask[f_end:m_end, :])
-    heel = masked_mean(lap[m_end:, :], mask[m_end:, :])
+    fore = masked_mean(lap_tex[:f_end, :], mask[:f_end, :])
+    mid  = masked_mean(lap_tex[f_end:m_end, :], mask[f_end:m_end, :])
+    heel = masked_mean(lap_tex[m_end:, :], mask[m_end:, :])
 
-    left  = masked_mean(lap[:, :w//2], mask[:, :w//2])
-    right = masked_mean(lap[:, w//2:], mask[:, w//2:])
+    left  = masked_mean(lap_tex[:, :w//2], mask[:, :w//2])
+    right = masked_mean(lap_tex[:, w//2:], mask[:, w//2:])
 
-    # Lower texture => smoother => more wear (heuristic)
     notes = []
 
     heel_fore = heel - fore
@@ -123,7 +189,7 @@ def analyze(image_pil: Image.Image):
         recommendation = "Rotate pairs; replace once tread flattens in key zones."
         shoes = "Neutral supportive shoes appropriate to activity"
 
-    # Overlay: edge heatmap + sole contour for explainability
+    # ---- Explainable overlay ----
     edges = cv2.Canny(gray, 50, 150)
     heatmap = cv2.applyColorMap(edges, cv2.COLORMAP_JET)
     overlay = cv2.addWeighted(bgr, 0.75, heatmap, 0.25, 0)
@@ -142,6 +208,7 @@ def analyze(image_pil: Image.Image):
         "recommendation": recommendation,
         "shoes": shoes,
         "metrics": {
+            **qc["metrics"],
             "heel_texture": round(heel, 1),
             "fore_texture": round(fore, 1),
             "mid_texture": round(mid, 1),
