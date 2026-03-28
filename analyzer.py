@@ -1,4 +1,20 @@
+from __future__ import annotations
 
+"""
+SoleCheck analyzer — upgraded CV pipeline
+=========================================
+Improvements over v1:
+  1. CLAHE preprocessing — adaptive contrast before every operation
+  2. Multi-channel segmentation — Otsu on grayscale AND saturation, best mask wins
+  3. GrabCut always runs as a refinement pass (not just a fallback)
+  4. Contour-fitted zones — heel/mid/fore split on actual bounding box, not fixed image %
+  5. Three-signal wear map — Laplacian + Sobel + HSV saturation (worn rubber loses colour)
+  6. Relaxed quality gate — blur threshold lowered so more real photos pass
+  7. Annotated overlay — zone boundary lines + labels drawn on the heatmap
+  8. INFERNO colourmap — more perceptually distinct than JET
+"""
+
+from typing import Dict, Any, Tuple, Optional, List
 
 import numpy as np
 import cv2
