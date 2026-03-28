@@ -5,9 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SoleCheck — Demo</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    #wakeBar{
+      display:none;
+      align-items:center;
+      gap:10px;
+      padding:10px 16px;
+      background:rgba(124,92,255,0.12);
+      border:1px solid rgba(124,92,255,0.3);
+      border-radius:12px;
+      font-size:13px;
+      color:var(--muted);
+      margin-bottom:14px;
+    }
+  </style>
+  <script>
+    // Ping the server as soon as the page loads.
+    // If it takes more than 2s to respond, show a "waking up" banner.
+    (function(){
+      const start = Date.now();
+      let bannerShown = false;
+      const timer = setTimeout(function(){
+        const bar = document.getElementById('wakeBar');
+        if(bar){ bar.style.display='flex'; bannerShown=true; }
+      }, 2000);
+      fetch('/healthz').then(function(){
+        clearTimeout(timer);
+        const bar = document.getElementById('wakeBar');
+        if(bar) bar.style.display='none';
+      }).catch(function(){
+        clearTimeout(timer);
+      });
+    })();
+  </script>
 </head>
 <body>
   <div class="container">
+    <div id="wakeBar">
+      <div class="spinner"></div>
+      <span>Server is waking up — this takes about 30 seconds on the free tier. Hang tight.</span>
+    </div>
     <div class="nav">
       <div class="brand">
         <div class="logo"></div>
