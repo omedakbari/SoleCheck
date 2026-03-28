@@ -5,6 +5,8 @@ import csv
 import time
 import hashlib
 import zipfile
+import urllib.request
+import urllib.error
 from collections import OrderedDict
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
@@ -23,10 +25,10 @@ Image.MAX_IMAGE_PIXELS = 25_000_000
 app = Flask(__name__)
 
 # ----------------------------
-# LRU cache: stores results for fast repeat demos + downloads
+# LRU cache
 # ----------------------------
 CACHE_MAX = 96
-_cache = OrderedDict()  # key -> dict payload
+_cache = OrderedDict()
 
 def _cache_get(key: str):
     if key not in _cache:
@@ -42,7 +44,7 @@ def _cache_set(key: str, value):
 
 
 # ----------------------------
-# Logging (privacy-friendly: no images stored)
+# Logging (privacy-friendly)
 # ----------------------------
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 LOG_PATH = os.path.join(DATA_DIR, "requests.csv")
@@ -53,17 +55,9 @@ def _ensure_log_header():
         with open(LOG_PATH, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow([
-                "timestamp_utc",
-                "mode",
-                "activity",
-                "weekly_miles",
-                "surface",
-                "left_hash",
-                "right_hash",
-                "pattern_left",
-                "pattern_right",
-                "pair_ok",
-                "pair_asymmetry",
+                "timestamp_utc", "mode", "activity", "weekly_miles", "surface",
+                "left_hash", "right_hash", "pattern_left", "pattern_right",
+                "pair_ok", "pair_asymmetry",
             ])
 
 def _log_request(row: list):
@@ -76,11 +70,7 @@ def _log_request(row: list):
 
 
 # ----------------------------
-# Sample images support
-# Put sample images under: static/samples/
-#   static/samples/sample_single.jpg
-#   static/samples/sample_left.jpg
-#   static/samples/sample_right.jpg
+# Sample images
 # ----------------------------
 SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "static", "samples")
 
@@ -108,6 +98,10 @@ def _read_upload(file_storage) -> Tuple[Optional[bytes], Optional[str]]:
     return raw, None
 
 
+# ----------------------------
+# Routes
+# ----------------------------
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
@@ -120,10 +114,6 @@ def home():
 
 @app.get("/sample")
 def sample():
-    """
-    Single-shoe sample demo.
-    Requires: static/samples/sample_single.jpg
-    """
     activity = request.args.get("activity", "walking")
     weekly_miles = request.args.get("weekly_miles", "unknown")
     surface = request.args.get("surface", "mixed")
@@ -150,12 +140,6 @@ def sample():
 
 @app.get("/sample_pair")
 def sample_pair():
-    """
-    Two-shoe sample demo.
-    Requires:
-      static/samples/sample_left.jpg
-      static/samples/sample_right.jpg
-    """
     activity = request.args.get("activity", "walking")
     weekly_miles = request.args.get("weekly_miles", "unknown")
     surface = request.args.get("surface", "mixed")
@@ -166,7 +150,7 @@ def sample_pair():
         return render_template(
             "index.html",
             error="Sample pair not found. Add static/samples/sample_left.jpg and static/samples/sample_right.jpg",
-            view=None
+            view=None,
         )
 
     out = analyze_pair(L, R, activity=activity, weekly_miles=weekly_miles, surface=surface)
@@ -208,18 +192,11 @@ def analyze():
         h = _sha(raw)
         rid = f"{h}:{mode}:{shoe_side}:{activity}:{weekly_miles}:{surface}"
 
-        cached = _cache_get(rid)
-        if cached is None:
+        if _cache_get(rid) is None:
             try:
                 img = Image.open(io.BytesIO(raw))
-                overlay_png, result = analyze_single(
-                    img,
-                    shoe_side=shoe_side,
-                    activity=activity,
-                    weekly_miles=weekly_miles,
-                    surface=surface,
-                )
-                payload = {
+                overlay_png, result = analyze_single(img, shoe_side=shoe_side, activity=activity, weekly_miles=weekly_miles, surface=surface)
+                _cache_set(rid, {
                     "mode": "single",
                     "result": result,
                     "overlay_left_png": overlay_png,
@@ -227,27 +204,13 @@ def analyze():
                     "created": datetime.utcnow().isoformat() + "Z",
                     "hash_left": h,
                     "hash_right": "",
-                }
-                _cache_set(rid, payload)
+                })
             except Exception as e:
                 return render_template("index.html", error=f"Failed to process image: {e}", view=None)
 
         view = _build_view_from_cache(rid)
-
         res = view["single"]
-        _log_request([
-            datetime.utcnow().isoformat() + "Z",
-            "single",
-            activity,
-            weekly_miles,
-            surface,
-            h,
-            "",
-            res.get("pattern", ""),
-            "",
-            res.get("ok", False),
-            "",
-        ])
+        _log_request([datetime.utcnow().isoformat() + "Z", "single", activity, weekly_miles, surface, h, "", res.get("pattern", ""), "", res.get("ok", False), ""])
         return render_template("index.html", error=None, view=view)
 
     # pair
@@ -261,17 +224,15 @@ def analyze():
     if errR:
         return render_template("index.html", error=f"Right shoe: {errR}", view=None)
 
-    hL = _sha(rawL)
-    hR = _sha(rawR)
+    hL, hR = _sha(rawL), _sha(rawR)
     rid = f"{hL}:{hR}:{mode}:{activity}:{weekly_miles}:{surface}"
 
-    cached = _cache_get(rid)
-    if cached is None:
+    if _cache_get(rid) is None:
         try:
             imgL = Image.open(io.BytesIO(rawL))
             imgR = Image.open(io.BytesIO(rawR))
             out = analyze_pair(imgL, imgR, activity=activity, weekly_miles=weekly_miles, surface=surface)
-            payload = {
+            _cache_set(rid, {
                 "mode": "pair",
                 "pair": out["pair"],
                 "overlay_left_png": out["left_overlay_png"],
@@ -279,30 +240,90 @@ def analyze():
                 "created": datetime.utcnow().isoformat() + "Z",
                 "hash_left": hL,
                 "hash_right": hR,
-            }
-            _cache_set(rid, payload)
+            })
         except Exception as e:
             return render_template("index.html", error=f"Failed to process images: {e}", view=None)
 
     view = _build_view_from_cache(rid)
-
     pair = view["pair"]
     pair_metrics = pair.get("pair_metrics", {}) or {}
-    _log_request([
-        datetime.utcnow().isoformat() + "Z",
-        "pair",
-        activity,
-        weekly_miles,
-        surface,
-        hL,
-        hR,
-        pair.get("left", {}).get("pattern", ""),
-        pair.get("right", {}).get("pattern", ""),
-        pair.get("ok", False),
-        pair_metrics.get("asymmetry_score_0_1", ""),
-    ])
+    _log_request([datetime.utcnow().isoformat() + "Z", "pair", activity, weekly_miles, surface, hL, hR, pair.get("left", {}).get("pattern", ""), pair.get("right", {}).get("pattern", ""), pair.get("ok", False), pair_metrics.get("asymmetry_score_0_1", "")])
     return render_template("index.html", error=None, view=view)
 
+
+# ----------------------------
+# AI Chat endpoint
+# ----------------------------
+
+@app.post("/chat")
+def chat():
+    """
+    Answers questions about a completed analysis using Claude.
+    Requires ANTHROPIC_API_KEY environment variable.
+    """
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    context = body.get("context") or {}
+    history = body.get("history") or []
+
+    if not message:
+        return {"error": "No message provided."}, 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {"error": "AI chat is not enabled on this deployment."}, 503
+
+    ctx_str = json.dumps(context, indent=2) if context else "No analysis context available."
+
+    system = (
+        "You are SoleCheck AI. You know biomechanics, gait, and footwear well.\n"
+        "The user just scanned their shoe sole. Here are the results:\n\n"
+        f"{ctx_str}\n\n"
+        "Answer in 2 to 3 sentences. Be direct. Use their specific results. "
+        "Skip filler phrases like 'great question' or 'it is important to note'. "
+        "Speak like you are talking to a friend who wants a straight answer. "
+        "Never use em dashes or semicolons. You are not a doctor."
+    )
+
+    claude_msgs = []
+    for h in history[-8:]:
+        r, c = h.get("role"), h.get("content", "")
+        if r in ("user", "assistant") and c:
+            claude_msgs.append({"role": r, "content": c})
+    claude_msgs.append({"role": "user", "content": message})
+
+    payload = json.dumps({
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 350,
+        "system": system,
+        "messages": claude_msgs,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=payload,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            text = (data.get("content") or [{}])[0].get("text", "No response.")
+            return {"response": text}
+    except urllib.error.HTTPError as e:
+        return {"error": f"AI service error {e.code}."}, 502
+    except Exception as e:
+        return {"error": f"Request failed: {e}"}, 500
+
+
+# ----------------------------
+# Download helpers
+# ----------------------------
 
 def _b64_png(png_bytes: Optional[bytes]) -> Optional[str]:
     if not png_bytes:
@@ -345,16 +366,11 @@ def download_result(rid: str):
     payload = _cache_get(rid)
     if payload is None:
         abort(404)
-    out: Dict[str, Any] = {
-        "rid": rid,
-        "created": payload.get("created"),
-        "mode": payload.get("mode"),
-    }
+    out: Dict[str, Any] = {"rid": rid, "created": payload.get("created"), "mode": payload.get("mode")}
     if payload["mode"] == "single":
         out["result"] = payload.get("result")
     else:
         out["pair"] = payload.get("pair")
-
     data = json.dumps(out, indent=2).encode("utf-8")
     return send_file(io.BytesIO(data), mimetype="application/json", as_attachment=True, download_name="solecheck_result.json")
 
@@ -389,17 +405,12 @@ def download_bundle(rid: str):
 
     mem = io.BytesIO()
     with zipfile.ZipFile(mem, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        out: Dict[str, Any] = {
-            "rid": rid,
-            "created": payload.get("created"),
-            "mode": payload.get("mode"),
-        }
+        out: Dict[str, Any] = {"rid": rid, "created": payload.get("created"), "mode": payload.get("mode")}
         if payload["mode"] == "single":
             out["result"] = payload.get("result")
         else:
             out["pair"] = payload.get("pair")
         z.writestr("result.json", json.dumps(out, indent=2))
-
         if payload.get("overlay_left_png"):
             z.writestr("overlay_left.png", payload["overlay_left_png"])
         if payload.get("overlay_right_png"):
