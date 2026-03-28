@@ -82,7 +82,7 @@
         <div class="cardHeader">
           <h2 style="margin:10px 0 6px; font-size:18px;">Live Demo</h2>
           <p class="sub" style="margin-bottom:10px;">
-            Choose Single or Pair. Upload outsole photo(s) and analyze.
+            Drop a photo of your sole below. Or click the zone to browse your files.
           </p>
         </div>
 
@@ -147,39 +147,44 @@
                 </div>
               </div>
 
-              <div class="drop mini">
+              <!-- Drop zone with id -->
+              <div id="dropSingle" class="drop mini">
                 <div>
-                  <div class="dropStrong">Single shoe upload</div>
-                  <div style="margin-top:6px;">Outsole photo (jpg/png/webp)</div>
+                  <div class="dropStrong">Drop your outsole photo here</div>
+                  <div class="dropHint">or click to browse your files</div>
                 </div>
               </div>
-              <input id="image1" name="image1" type="file" accept="image/*" capture="environment" />
-              <div class="fileName" id="fileName1">No file selected</div>
-
-              <img id="preview1" class="preview" alt="preview1"/>
+              <input id="image1" name="image1" type="file" accept="image/*" style="display:none;" />
+              <div class="fileName" id="fileName1" style="margin-top:8px;">No file selected</div>
+              <img id="preview1" class="preview" alt="preview" style="margin-top:10px;"/>
             </div>
 
             <!-- Pair block -->
             <div id="pairBlock" class="block" style="display:none;">
-              <div class="drop mini">
-                <div>
-                  <div class="dropStrong">Pair upload</div>
-                  <div style="margin-top:6px;">Left outsole + Right outsole</div>
-                </div>
-              </div>
-
               <div class="grid2" style="margin-top:10px;">
                 <div>
-                  <label class="k" style="display:block; margin-bottom:6px;">Left shoe photo</label>
-                  <input id="imageLeft" name="image_left" type="file" accept="image/*" capture="environment" />
-                  <div class="fileName" id="fileNameL">No file selected</div>
-                  <img id="previewL" class="preview" alt="previewL"/>
+                  <label class="k" style="display:block; margin-bottom:6px;">Left shoe</label>
+                  <div id="dropLeft" class="drop mini">
+                    <div>
+                      <div class="dropStrong">Left outsole</div>
+                      <div class="dropHint">drop or click</div>
+                    </div>
+                  </div>
+                  <input id="imageLeft" name="image_left" type="file" accept="image/*" style="display:none;" />
+                  <div class="fileName" id="fileNameL" style="margin-top:8px;">No file selected</div>
+                  <img id="previewL" class="preview" alt="left" style="margin-top:10px;"/>
                 </div>
                 <div>
-                  <label class="k" style="display:block; margin-bottom:6px;">Right shoe photo</label>
-                  <input id="imageRight" name="image_right" type="file" accept="image/*" capture="environment" />
-                  <div class="fileName" id="fileNameR">No file selected</div>
-                  <img id="previewR" class="preview" alt="previewR"/>
+                  <label class="k" style="display:block; margin-bottom:6px;">Right shoe</label>
+                  <div id="dropRight" class="drop mini">
+                    <div>
+                      <div class="dropStrong">Right outsole</div>
+                      <div class="dropHint">drop or click</div>
+                    </div>
+                  </div>
+                  <input id="imageRight" name="image_right" type="file" accept="image/*" style="display:none;" />
+                  <div class="fileName" id="fileNameR" style="margin-top:8px;">No file selected</div>
+                  <img id="previewR" class="preview" alt="right" style="margin-top:10px;"/>
                 </div>
               </div>
             </div>
@@ -191,41 +196,57 @@
 
             <div id="loading" class="loading" style="display:none;">
               <div class="spinner"></div>
-              <div>Analyzing…</div>
+              <div class="loadingText">Analyzing…</div>
             </div>
 
             {% if error %}
               <div class="alert">{{ error }}</div>
             {% endif %}
 
+            <!-- ─── Results ─────────────────────────────────────── -->
             {% if view %}
-              <div style="margin-top:16px;">
+              <div style="margin-top:18px;">
                 <div class="badge">Results</div>
 
                 <div class="downloadRow">
-                  <a class="btn" href="{{ view.download.result_json }}">Download JSON</a>
-                  <a class="btn" href="{{ view.download.bundle_zip }}">Download ZIP</a>
+                  <a class="btn" href="{{ view.download.result_json }}">↓ JSON</a>
+                  <a class="btn" href="{{ view.download.bundle_zip }}">↓ ZIP bundle</a>
                 </div>
 
                 {% if view.mode == "single" %}
                   <div class="resultsGrid">
                     <div>
                       {% if view.overlay_left_b64 %}
-                        <img class="preview show" alt="overlay" src="data:image/png;base64,{{ view.overlay_left_b64 }}" />
+                        <img class="preview show" alt="wear overlay" src="data:image/png;base64,{{ view.overlay_left_b64 }}" />
                         <div class="downloadRow">
-                          <a class="btn" href="{{ view.download.overlay_left }}">Download overlay</a>
+                          <a class="btn" href="{{ view.download.overlay_left }}">↓ Overlay PNG</a>
                         </div>
                       {% endif %}
                     </div>
 
                     <div>
-                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.single.pattern }}</b></div></div>
-                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.single.confidence * 100) | round(0) }}%</div></div>
+                      <!-- Pattern tag -->
+                      <div class="patternTag">
+                        <span class="patternDot"></span>
+                        {{ view.single.pattern }}
+                      </div>
 
-                      <div class="kv">
-                        <div class="k">What it suggests</div>
+                      <!-- Confidence bar -->
+                      <div class="metricBars">
+                        <div class="metricBarRow">
+                          <div class="metricBarLabel">Confidence</div>
+                          <div class="barTrack">
+                            <div class="barFill" data-pct="{{ (view.single.confidence * 100)|round(0)|int }}"></div>
+                          </div>
+                          <div class="metricBarVal">{{ (view.single.confidence * 100)|round(0)|int }}%</div>
+                        </div>
+                      </div>
+
+                      <!-- What it suggests -->
+                      <div class="kv" style="padding-top:8px;">
+                        <div class="k">Suggests</div>
                         <div class="v">
-                          <ul style="margin:0; padding-left:18px;">
+                          <ul style="margin:0; padding-left:18px; font-size:13px; line-height:1.6;">
                             {% for item in view.single.summary.split(' | ') %}
                               <li>{{ item }}</li>
                             {% endfor %}
@@ -233,42 +254,63 @@
                         </div>
                       </div>
 
-                      <div class="kv"><div class="k">Recommendation</div><div class="v">{{ view.single.recommendation }}</div></div>
-                      <div class="kv"><div class="k">Shoes</div><div class="v">{{ view.single.shoes }}</div></div>
+                      <!-- Recommendation -->
+                      <div class="recBox">
+                        <strong style="font-size:12px; color:var(--accent2);">Recommendation</strong><br/>
+                        {{ view.single.recommendation }}
+                      </div>
+
+                      <!-- Shoe suggestions -->
+                      <div class="kv" style="border-bottom:none;">
+                        <div class="k">Shoes</div>
+                        <div class="v" style="font-size:13px;">{{ view.single.shoes }}</div>
+                      </div>
 
                       <details style="margin-top:10px;">
-                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Metrics</summary>
-                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.single.metrics }}</pre>
+                        <summary style="cursor:pointer; color:rgba(255,255,255,0.5); font-size:12px;">Raw metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:8px; font-size:11px; color:var(--muted);">{{ view.single.metrics }}</pre>
                       </details>
                     </div>
                   </div>
+
                 {% else %}
+                  <!-- Pair results -->
                   <div class="resultsGrid">
                     <div>
                       <div class="badge" style="margin-bottom:10px;">Left shoe</div>
                       {% if view.overlay_left_b64 %}
                         <img class="preview show" alt="left overlay" src="data:image/png;base64,{{ view.overlay_left_b64 }}" />
                         <div class="downloadRow">
-                          <a class="btn" href="{{ view.download.overlay_left }}">Download left overlay</a>
+                          <a class="btn" href="{{ view.download.overlay_left }}">↓ Left overlay</a>
                         </div>
                       {% endif %}
-                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.pair.left.pattern }}</b></div></div>
-                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.pair.left.confidence * 100) | round(0) }}%</div></div>
 
-                      <div class="kv">
-                        <div class="k">What it suggests</div>
+                      <div class="patternTag" style="font-size:12px; padding:7px 12px;">
+                        <span class="patternDot"></span>
+                        {{ view.pair.left.pattern }}
+                      </div>
+                      <div class="metricBars">
+                        <div class="metricBarRow">
+                          <div class="metricBarLabel">Confidence</div>
+                          <div class="barTrack">
+                            <div class="barFill" data-pct="{{ (view.pair.left.confidence * 100)|round(0)|int }}"></div>
+                          </div>
+                          <div class="metricBarVal">{{ (view.pair.left.confidence * 100)|round(0)|int }}%</div>
+                        </div>
+                      </div>
+                      <div class="kv" style="border-bottom:none; padding-top:6px;">
+                        <div class="k">Suggests</div>
                         <div class="v">
-                          <ul style="margin:0; padding-left:18px;">
+                          <ul style="margin:0; padding-left:18px; font-size:12px; line-height:1.6;">
                             {% for item in view.pair.left.summary.split(' | ') %}
                               <li>{{ item }}</li>
                             {% endfor %}
                           </ul>
                         </div>
                       </div>
-
-                      <details style="margin-top:10px;">
-                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Left metrics</summary>
-                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.left.metrics }}</pre>
+                      <details style="margin-top:8px;">
+                        <summary style="cursor:pointer; color:rgba(255,255,255,0.5); font-size:12px;">Left metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:6px; font-size:11px; color:var(--muted);">{{ view.pair.left.metrics }}</pre>
                       </details>
                     </div>
 
@@ -277,38 +319,63 @@
                       {% if view.overlay_right_b64 %}
                         <img class="preview show" alt="right overlay" src="data:image/png;base64,{{ view.overlay_right_b64 }}" />
                         <div class="downloadRow">
-                          <a class="btn" href="{{ view.download.overlay_right }}">Download right overlay</a>
+                          <a class="btn" href="{{ view.download.overlay_right }}">↓ Right overlay</a>
                         </div>
                       {% endif %}
-                      <div class="kv"><div class="k">Pattern</div><div class="v"><b>{{ view.pair.right.pattern }}</b></div></div>
-                      <div class="kv"><div class="k">Confidence</div><div class="v">{{ (view.pair.right.confidence * 100) | round(0) }}%</div></div>
 
-                      <div class="kv">
-                        <div class="k">What it suggests</div>
+                      <div class="patternTag" style="font-size:12px; padding:7px 12px;">
+                        <span class="patternDot"></span>
+                        {{ view.pair.right.pattern }}
+                      </div>
+                      <div class="metricBars">
+                        <div class="metricBarRow">
+                          <div class="metricBarLabel">Confidence</div>
+                          <div class="barTrack">
+                            <div class="barFill" data-pct="{{ (view.pair.right.confidence * 100)|round(0)|int }}"></div>
+                          </div>
+                          <div class="metricBarVal">{{ (view.pair.right.confidence * 100)|round(0)|int }}%</div>
+                        </div>
+                      </div>
+                      <div class="kv" style="border-bottom:none; padding-top:6px;">
+                        <div class="k">Suggests</div>
                         <div class="v">
-                          <ul style="margin:0; padding-left:18px;">
+                          <ul style="margin:0; padding-left:18px; font-size:12px; line-height:1.6;">
                             {% for item in view.pair.right.summary.split(' | ') %}
                               <li>{{ item }}</li>
                             {% endfor %}
                           </ul>
                         </div>
                       </div>
-
-                      <details style="margin-top:10px;">
-                        <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Right metrics</summary>
-                        <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.right.metrics }}</pre>
+                      <details style="margin-top:8px;">
+                        <summary style="cursor:pointer; color:rgba(255,255,255,0.5); font-size:12px;">Right metrics</summary>
+                        <pre style="white-space:pre-wrap; margin-top:6px; font-size:11px; color:var(--muted);">{{ view.pair.right.metrics }}</pre>
                       </details>
                     </div>
                   </div>
 
-                  <div class="card" style="margin-top:14px;">
+                  <!-- Pair comparison -->
+                  <div class="card" style="margin-top:14px; border-color:rgba(124,92,255,0.2);">
                     <div class="cardBody">
                       <div class="badge">Pair comparison</div>
-                      <div class="kv"><div class="k">Summary</div><div class="v">{{ view.pair.pair_summary }}</div></div>
+                      {% if view.pair.pair_metrics and view.pair.pair_metrics.asymmetry_score_0_1 is defined %}
+                        <div class="metricBars" style="margin-top:10px;">
+                          <div class="metricBarRow">
+                            <div class="metricBarLabel">Asymmetry</div>
+                            <div class="barTrack">
+                              <div class="barFill" data-pct="{{ (view.pair.pair_metrics.asymmetry_score_0_1 * 100)|round(0)|int }}"></div>
+                            </div>
+                            <div class="metricBarVal">{{ (view.pair.pair_metrics.asymmetry_score_0_1 * 100)|round(0)|int }}%</div>
+                          </div>
+                        </div>
+                      {% endif %}
+                      <div class="kv" style="border-bottom:none; padding-top:8px;">
+                        <div class="k">Summary</div>
+                        <div class="v" style="font-size:13px;">{{ view.pair.pair_summary }}</div>
+                      </div>
                       {% if view.pair.pair_metrics %}
-                        <details style="margin-top:10px;">
-                          <summary style="cursor:pointer; color: rgba(255,255,255,0.68);">Pair metrics</summary>
-                          <pre style="white-space:pre-wrap; margin-top:8px;">{{ view.pair.pair_metrics }}</pre>
+                        <details style="margin-top:8px;">
+                          <summary style="cursor:pointer; color:rgba(255,255,255,0.5); font-size:12px;">Pair metrics</summary>
+                          <pre style="white-space:pre-wrap; margin-top:6px; font-size:11px; color:var(--muted);">{{ view.pair.pair_metrics }}</pre>
                         </details>
                       {% endif %}
                     </div>
@@ -321,6 +388,37 @@
               <small>Disclaimer: informational guidance only; not a medical diagnosis.</small>
             </div>
           </form>
+
+          <!-- ─── AI Chat Panel (shown after results) ────────────── -->
+          {% if view %}
+          <div class="chatPanel" id="chatPanel">
+            <div class="chatHeader">
+              <span class="chatDot"></span>
+              Ask anything about your results
+            </div>
+            <div id="chatMessages" class="chatMessages">
+              <div class="chatMsg chatMsg-ai">
+                I looked at your scan. Ask me what the pattern means, whether you should be worried, or which shoes to get.
+              </div>
+            </div>
+            <div class="chatSuggestions">
+              <button class="chatSuggestion" data-q="What does my wear pattern mean for my running form?">What does this mean for my form?</button>
+              <button class="chatSuggestion" data-q="Should I be worried about my gait?">Should I be worried?</button>
+              <button class="chatSuggestion" data-q="Why these specific shoes and not others?">Why these shoes?</button>
+              <button class="chatSuggestion" data-q="What exercises would help fix this?">What exercises help?</button>
+            </div>
+            <form id="chatForm" class="chatInputRow">
+              <input id="chatInput" class="chatInput" type="text" placeholder="Type your question…" autocomplete="off" />
+              <button id="chatSend" class="btn btnPrimary" type="submit" style="padding:9px 14px; font-size:13px;">Send</button>
+            </form>
+          </div>
+
+          <!-- Embed analysis context for JS -->
+          <script>
+            window.SOLECHECK_CONTEXT = {% if view.mode == "single" %}{{ view.single | tojson }}{% else %}{{ view.pair | tojson }}{% endif %};
+          </script>
+          {% endif %}
+
         </div>
       </div>
     </div>
