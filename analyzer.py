@@ -11,15 +11,10 @@ import cv2
 # ----------------------------
 MAX_SIDE = 1100
 
-# Photo quality thresholds
 BLUR_VAR_MIN = 60.0
 DARK_MEAN_MIN = 45.0
 BRIGHT_MEAN_MAX = 210.0
-
-# Mask confidence threshold
 SOLE_CONF_MIN = 0.15
-
-# Wear classification thresholds
 SIDE_WEAR_THRESH = 0.12
 HEEL_FORE_THRESH = 0.10
 
@@ -46,13 +41,13 @@ def _quality_checks(gray: np.ndarray) -> Dict[str, Any]:
     lap = cv2.Laplacian(gray, cv2.CV_64F)
     blur_var = float(lap.var())
     if blur_var < BLUR_VAR_MIN:
-        reasons.append("Image looks blurry (low detail).")
+        reasons.append("The photo looks blurry. Try holding the camera steady.")
 
     mean_brightness = float(gray.mean())
     if mean_brightness < DARK_MEAN_MIN:
-        reasons.append("Image looks too dark.")
+        reasons.append("The photo is too dark. Move to better lighting.")
     elif mean_brightness > BRIGHT_MEAN_MAX:
-        reasons.append("Image looks too bright / washed out.")
+        reasons.append("The photo is overexposed. Avoid direct overhead light.")
 
     return {
         "ok": (len(reasons) == 0),
@@ -71,7 +66,6 @@ def _mask_confidence(mask: np.ndarray) -> float:
     mask_area = float(cv2.countNonZero(mask))
     img_area = float(h * w)
     area_frac = mask_area / img_area
-    # ramp up from 5% to 35%
     conf = max(0.0, min(1.0, (area_frac - 0.05) / (0.35 - 0.05)))
     return conf
 
@@ -90,7 +84,6 @@ def _initial_otsu_mask(gray: np.ndarray) -> np.ndarray:
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, bw = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Ensure foreground is white
     if float(np.mean(bw)) > 127.0:
         bw = cv2.bitwise_not(bw)
 
@@ -100,17 +93,12 @@ def _initial_otsu_mask(gray: np.ndarray) -> np.ndarray:
 
 
 def _grabcut_refine(bgr: np.ndarray, seed_mask: np.ndarray) -> np.ndarray:
-    """
-    GrabCut refinement using a rectangle derived from the seed mask's bounding box.
-    Returns a binary mask (uint8 0/255).
-    """
     h, w = seed_mask.shape[:2]
     if h == 0 or w == 0:
         return seed_mask
 
     ys, xs = np.where(seed_mask > 0)
     if ys.size < 50:
-        # fallback: center rectangle
         x0 = int(0.10 * w)
         y0 = int(0.10 * h)
         x1 = int(0.90 * w)
@@ -129,10 +117,8 @@ def _grabcut_refine(bgr: np.ndarray, seed_mask: np.ndarray) -> np.ndarray:
 
     try:
         cv2.grabCut(bgr, gc_mask, rect, bgdModel, fgdModel, 3, cv2.GC_INIT_WITH_RECT)
-        # probable/definite foreground
         fg = np.where((gc_mask == cv2.GC_FGD) | (gc_mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
 
-        # clean
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
         fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel, iterations=1)
         fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, kernel, iterations=2)
@@ -143,10 +129,6 @@ def _grabcut_refine(bgr: np.ndarray, seed_mask: np.ndarray) -> np.ndarray:
 
 
 def _sole_mask(bgr: np.ndarray, gray: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:
-    """
-    Mask pipeline:
-      Otsu seed -> if low confidence, refine with GrabCut -> largest contour
-    """
     seed = _initial_otsu_mask(gray)
     conf_seed = _mask_confidence(seed)
 
@@ -199,7 +181,6 @@ def _normalize_rotation(bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, 
     bgr_r = _rotate_bound(bgr, applied, is_mask=False)
     mask_r = _rotate_bound(mask, applied, is_mask=True)
 
-    # Keep portrait-ish
     h, w = mask_r.shape[:2]
     if w > h:
         bgr_r = _rotate_bound(bgr_r, 90.0, is_mask=False)
@@ -231,20 +212,10 @@ def _normalize_in_mask(arr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def _wear_evidence(gray: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Evidence signals:
-      - Texture: |Laplacian| (low texture => worn)
-      - Gradient magnitude (low gradient => smoother => worn)
-    Combine both into a wear score map.
-    Returns:
-      lap_tex (uint8), grad_mag (uint8), wear_norm (uint8)
-    """
-    # Texture
     lap = cv2.Laplacian(gray, cv2.CV_16S, ksize=3)
-    lap_tex = cv2.convertScaleAbs(lap)  # high => textured
-    inv_tex = (255 - lap_tex).astype(np.uint8)  # high => smooth
+    lap_tex = cv2.convertScaleAbs(lap)
+    inv_tex = (255 - lap_tex).astype(np.uint8)
 
-    # Gradient
     gx = cv2.Sobel(gray, cv2.CV_16S, 1, 0, ksize=3)
     gy = cv2.Sobel(gray, cv2.CV_16S, 0, 1, ksize=3)
     grad = cv2.magnitude(gx.astype(np.float32), gy.astype(np.float32))
@@ -254,7 +225,6 @@ def _wear_evidence(gray: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.n
     inv_tex_n = _normalize_in_mask(inv_tex, mask)
     inv_grad_n = _normalize_in_mask(inv_grad, mask)
 
-    # Combine (weights can be tuned)
     wear = (0.60 * inv_tex_n.astype(np.float32) + 0.40 * inv_grad_n.astype(np.float32)).astype(np.uint8)
     wear[mask == 0] = 0
 
@@ -262,38 +232,38 @@ def _wear_evidence(gray: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.n
 
 
 def _pick_shoes(activity: str, pronation_class: str) -> str:
-    """
-    Simple recommendation mapping (customize later).
-    pronation_class: "overpronation" | "supination" | "neutral"
-    """
+    """Return plain, specific shoe suggestions based on activity and pronation."""
     activity = (activity or "walking").lower()
     if activity not in {"running", "walking", "basketball", "training"}:
         activity = "walking"
 
     if activity == "running":
         if pronation_class == "overpronation":
-            return "Stability runners: Brooks Adrenaline, ASICS Kayano, HOKA Arahi"
+            return "You need a stability runner. Try the Brooks Adrenaline, ASICS Kayano, or HOKA Arahi."
         if pronation_class == "supination":
-            return "Cushioned neutral: Brooks Glycerin, ASICS Cumulus, Nike Invincible"
-        return "Neutral daily trainers: Nike Pegasus, ASICS Novablast, Saucony Ride"
+            return "Go with a cushioned neutral shoe. The Brooks Glycerin, ASICS Cumulus, or Nike Invincible all work well."
+        return "A neutral daily trainer works for you. Look at the Nike Pegasus, ASICS Novablast, or Saucony Ride."
+
     if activity == "basketball":
         if pronation_class == "overpronation":
-            return "Supportive hoops: Nike LeBron line, KD line (snug fit), orthotic-friendly models"
+            return "Pick a supportive hoop shoe with a snug fit. The Nike LeBron and KD lines hold up well. Consider an orthotic too."
         if pronation_class == "supination":
-            return "Cushioned hoops: Nike GT Jump, Jordan Zion line, plus ankle mobility work"
-        return "Balanced hoops: Nike GT Cut, Kobe-style low-tops (if comfortable), good torsional support"
+            return "You want extra cushion underfoot. Try the Nike GT Jump or Jordan Zion line. Work on ankle mobility on the side."
+        return "A balanced court shoe fits your pattern. The Nike GT Cut or a Kobe low top gives you good torsional support."
+
     if activity == "training":
         if pronation_class == "overpronation":
-            return "Stable trainers: Nike Metcon, Reebok Nano, plus supportive insole if needed"
+            return "A stable trainer keeps you locked in. Try the Nike Metcon or Reebok Nano. Add a supportive insole if needed."
         if pronation_class == "supination":
-            return "Cushioned trainers + mobility: consider softer midsoles and ankle work"
-        return "General trainers: Nike Metcon / Reebok Nano / Adidas Dropset"
+            return "Get a trainer with a softer midsole. Focus on ankle mobility work between sessions."
+        return "Any solid cross trainer works here. Nike Metcon, Reebok Nano, or Adidas Dropset are all good."
+
     # walking
     if pronation_class == "overpronation":
-        return "Stability walkers: ASICS GT-2000, Brooks Adrenaline (walk use), supportive insoles"
+        return "A stability walking shoe helps correct the inward roll. Try the ASICS GT 2000, Brooks Adrenaline, or add a supportive insole."
     if pronation_class == "supination":
-        return "Cushioned walkers: HOKA Bondi, Brooks Glycerin, ASICS Cumulus"
-    return "Comfort neutral walkers: Brooks Ghost, Nike Pegasus, ASICS Cumulus"
+        return "Get something with serious cushioning. The HOKA Bondi, Brooks Glycerin, or ASICS Cumulus all absorb impact well."
+    return "Your foot works well in a neutral shoe. The Brooks Ghost, Nike Pegasus, or ASICS Cumulus are solid picks."
 
 
 def analyze_single(
@@ -303,45 +273,37 @@ def analyze_single(
     weekly_miles: str = "unknown",
     surface: str = "mixed",
 ) -> Tuple[Optional[bytes], Dict[str, Any]]:
-    """
-    Returns:
-      overlay_png_bytes (bytes|None)
-      result (dict)
-    """
-    # Convert to OpenCV BGR
+
     rgb = np.array(image_pil.convert("RGB"))
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     bgr = _resize_bgr(bgr)
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-    # Photo quality gate
     qc = _quality_checks(gray)
     if not qc["ok"]:
         return None, {
             "ok": False,
-            "pattern": "Retake photo",
+            "pattern": "Retake needed",
             "confidence": 0.0,
             "summary": " ".join(qc["reasons"]),
-            "recommendation": "Try: bright even lighting, fill the frame with the sole, and hold steady.",
-            "shoes": "—",
+            "recommendation": "Bright, even lighting works best. Fill the frame with the sole and hold steady.",
+            "shoes": "",
             "metrics": qc["metrics"],
         }
 
-    # Mask (Otsu + GrabCut fallback)
     mask, mask_meta = _sole_mask(bgr, gray)
     conf0 = _mask_confidence(mask)
     if conf0 < SOLE_CONF_MIN:
         return None, {
             "ok": False,
-            "pattern": "Retake photo",
+            "pattern": "Retake needed",
             "confidence": round(conf0, 2),
-            "summary": "Couldn’t confidently isolate the sole from the background.",
-            "recommendation": "Center the sole, move closer so it fills most of the frame, and use a plain background.",
-            "shoes": "—",
+            "summary": "We could not separate the sole from the background.",
+            "recommendation": "Center the sole in frame, move closer, and use a plain background.",
+            "shoes": "",
             "metrics": {**qc["metrics"], **mask_meta, "mask_conf": round(conf0, 3)},
         }
 
-    # Normalize rotation
     bgr, mask, rot_deg = _normalize_rotation(bgr, mask)
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
@@ -349,23 +311,20 @@ def analyze_single(
     if conf < SOLE_CONF_MIN:
         return None, {
             "ok": False,
-            "pattern": "Retake photo",
+            "pattern": "Retake needed",
             "confidence": round(conf, 2),
-            "summary": "Sole was detected, but alignment was unstable.",
-            "recommendation": "Try again with the sole centered and a plain background.",
-            "shoes": "—",
+            "summary": "The sole was found but could not be aligned reliably.",
+            "recommendation": "Center the sole and try a plain background.",
+            "shoes": "",
             "metrics": {**qc["metrics"], **mask_meta, "mask_conf": round(conf, 3), "rotation_deg": round(rot_deg, 2)},
         }
 
-    # Wear evidence
     lap_tex, grad_mag, wear_map = _wear_evidence(gray, mask)
 
-    # Region splits (toe top, heel bottom)
     h, w = gray.shape[:2]
     f_end = int(0.30 * h)
     m_end = int(0.70 * h)
 
-    # Region texture means (lower => smoother)
     fore_tex = _masked_mean(lap_tex[:f_end, :], mask[:f_end, :])
     mid_tex  = _masked_mean(lap_tex[f_end:m_end, :], mask[f_end:m_end, :])
     heel_tex = _masked_mean(lap_tex[m_end:, :], mask[m_end:, :])
@@ -373,7 +332,6 @@ def analyze_single(
     left_tex  = _masked_mean(lap_tex[:, :w//2], mask[:, :w//2])
     right_tex = _masked_mean(lap_tex[:, w//2:], mask[:, w//2:])
 
-    # Convert texture to wear score
     def wear_score(tex: float) -> float:
         return 1.0 / (tex + 1.0)
 
@@ -384,7 +342,6 @@ def analyze_single(
 
     heel_fore_ratio = heel_w / (fore_w + EPS)
 
-    # Medial/lateral mapping depends on shoe side
     shoe_side = (shoe_side or "unknown").lower()
     if shoe_side == "left":
         medial_w = right_w
@@ -402,41 +359,41 @@ def analyze_single(
 
     notes = []
     if heel_fore_ratio > (1.0 + HEEL_FORE_THRESH):
-        notes.append("Heel region appears smoother than forefoot (possible heel striking).")
+        notes.append("Your heel wears out faster than your forefoot. You hit heel first when you walk or run.")
         strike_hint = "heel"
     elif heel_fore_ratio < (1.0 - HEEL_FORE_THRESH):
-        notes.append("Forefoot region appears smoother than heel (possible forefoot loading).")
+        notes.append("Your forefoot takes more impact than the heel. You load through the front of your foot.")
         strike_hint = "forefoot"
     else:
-        notes.append("Heel vs forefoot wear looks fairly balanced.")
+        notes.append("Heel and forefoot wear are balanced.")
         strike_hint = "balanced"
 
     pronation_class = "neutral"
-    pattern = "Neutral or mixed wear"
-    recommendation = "Rotate pairs; replace once tread flattens in key zones."
+    pattern = "Balanced wear"
+    recommendation = "Rotate your pairs. Replace the shoe once the tread flattens in the worn zones."
     if weekly_miles and weekly_miles != "unknown":
-        recommendation = "Rotate pairs; track wear; replace once tread flattens in key zones."
+        recommendation = "Rotate your pairs and track mileage. Replace the shoe once the tread flattens in the worn zones."
 
     if shoe_side in ("left", "right"):
         ml_ratio = medial_w / (lateral_w + EPS)
         if ml_ratio > (1.0 + SIDE_WEAR_THRESH):
             pronation_class = "overpronation"
-            pattern = "Likely overpronation tendency (medial wear)"
-            notes.append("Medial side appears smoother than lateral.")
-            recommendation = "Consider stability support + foot/ankle strengthening."
+            pattern = "Overpronation, inside edge wear"
+            notes.append("The inside edge is more worn than the outside. Your foot rolls inward.")
+            recommendation = "Try a stability shoe. Foot and ankle strengthening exercises help correct the inward roll."
         elif ml_ratio < (1.0 - SIDE_WEAR_THRESH):
             pronation_class = "supination"
-            pattern = "Likely supination tendency (lateral wear)"
-            notes.append("Lateral side appears smoother than medial.")
-            recommendation = "Prioritize cushioning + ankle mobility work."
+            pattern = "Supination, outside edge wear"
+            notes.append("The outside edge is more worn than the inside. Your foot rolls outward.")
+            recommendation = "Focus on cushioning and ankle mobility. A neutral shoe with extra padding helps here."
         else:
-            notes.append("Medial vs lateral wear looks fairly balanced.")
+            notes.append("Inside and outside edge wear look even.")
     else:
-        notes.append("Tip: select Left/Right shoe for more accurate medial/lateral labeling.")
+        notes.append("Select Left or Right shoe to get medial and lateral wear labels.")
 
     shoes = _pick_shoes(activity, pronation_class)
 
-    # Build overlay: wear heatmap + contour
+    # Build overlay
     wear_color = cv2.applyColorMap(wear_map, cv2.COLORMAP_JET)
     overlay = cv2.addWeighted(bgr, 0.78, wear_color, 0.22, 0)
 
@@ -490,10 +447,7 @@ def analyze_pair(
     weekly_miles: str = "unknown",
     surface: str = "mixed",
 ) -> Dict[str, Any]:
-    """
-    Runs both shoes and produces an asymmetry report.
-    Returns a dict including per-shoe results + pair summary.
-    """
+
     left_png, left_res = analyze_single(left_image_pil, shoe_side="left", activity=activity, weekly_miles=weekly_miles, surface=surface)
     right_png, right_res = analyze_single(right_image_pil, shoe_side="right", activity=activity, weekly_miles=weekly_miles, surface=surface)
 
@@ -508,38 +462,36 @@ def analyze_pair(
     if not pair["ok"]:
         reasons = []
         if not left_res.get("ok"):
-            reasons.append("Left shoe: " + (left_res.get("summary") or "needs retake"))
+            reasons.append("Left shoe: " + (left_res.get("summary") or "needs a retake"))
         if not right_res.get("ok"):
-            reasons.append("Right shoe: " + (right_res.get("summary") or "needs retake"))
+            reasons.append("Right shoe: " + (right_res.get("summary") or "needs a retake"))
         pair["pair_summary"] = " | ".join(reasons)
         return {"pair": pair, "left_overlay_png": left_png, "right_overlay_png": right_png}
 
-    # Asymmetry (compare key ratios)
     L = left_res["metrics"]
     R = right_res["metrics"]
 
     hf_L = float(L.get("heel_fore_wear_ratio", 1.0))
     hf_R = float(R.get("heel_fore_wear_ratio", 1.0))
-
     ml_L = float(L.get("medial_lateral_wear_ratio", 1.0))
     ml_R = float(R.get("medial_lateral_wear_ratio", 1.0))
 
     asym = abs(hf_L - hf_R) + abs(ml_L - ml_R)
-    asym_score = float(min(1.0, asym / 1.5))  # heuristic scaling
+    asym_score = float(min(1.0, asym / 1.5))
 
     bullets = []
     if abs(hf_L - hf_R) > 0.12:
         if hf_L > hf_R:
-            bullets.append("Left shoe shows relatively more heel-dominant wear than right.")
+            bullets.append("Your left shoe takes more heel impact than the right.")
         else:
-            bullets.append("Right shoe shows relatively more heel-dominant wear than left.")
+            bullets.append("Your right shoe takes more heel impact than the left.")
     if abs(ml_L - ml_R) > 0.12:
         if ml_L > ml_R:
-            bullets.append("Left shoe shows relatively more medial wear tendency than right.")
+            bullets.append("Your left foot rolls inward more than the right.")
         else:
-            bullets.append("Right shoe shows relatively more medial wear tendency than left.")
+            bullets.append("Your right foot rolls inward more than the left.")
     if not bullets:
-        bullets.append("Left vs right wear looks fairly consistent.")
+        bullets.append("Left and right wear look consistent. Your gait is fairly symmetrical.")
 
     pair["pair_summary"] = " ".join(bullets)
     pair["pair_metrics"] = {
