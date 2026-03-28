@@ -1,3 +1,8 @@
+// ============================================================
+// SoleCheck — app.js  (full rewrite)
+// ============================================================
+
+// ─── Elements ────────────────────────────────────────────────
 const form        = document.getElementById("demoForm");
 const analyzeBtn  = document.getElementById("analyzeBtn");
 const loading     = document.getElementById("loading");
@@ -27,27 +32,37 @@ function setPreview(file, previewEl, nameEl) {
   if (!file) return;
   nameEl.textContent = file.name;
   previewEl.src = URL.createObjectURL(file);
-  previewEl.classList.add("show");}
+  previewEl.classList.add("show");
+}
 
 function assignFile(file, input, previewEl, nameEl) {
-  try {const dt = new DataTransfer();
+  try {
+    const dt = new DataTransfer();
     dt.items.add(file);
-    input.files = dt.files;} catch (_) {}
+    input.files = dt.files;
+  } catch (_) {}
   setPreview(file, previewEl, nameEl);
-  validateReady();}
+  validateReady();
+}
+
 function currentMode() {
-  return (modeRadios.find(r => r.checked) || {}).value || "single";}
+  return (modeRadios.find(r => r.checked) || {}).value || "single";
+}
+
 function updateModeUI() {
   const m = currentMode();
   if (singleBlock) singleBlock.style.display = m === "single" ? "" : "none";
   if (pairBlock)   pairBlock.style.display   = m === "pair"   ? "" : "none";
-  validateReady();}
+  validateReady();
+}
+
 function validateReady() {
   const m = currentMode();
   const ok = m === "single"
     ? !!(image1?.files?.[0])
     : !!(imageLeft?.files?.[0] && imageRight?.files?.[0]);
-  if (analyzeBtn) analyzeBtn.disabled = !ok;}
+  if (analyzeBtn) analyzeBtn.disabled = !ok;
+}
 
 // ─── Drag and Drop ───────────────────────────────────────────
 
@@ -60,21 +75,32 @@ function setupDrop(dropEl, input, previewEl, nameEl) {
   ["dragenter", "dragover"].forEach(evt =>
     dropEl.addEventListener(evt, e => {
       e.preventDefault();
-      dropEl.classList.add("drag-over");}));
+      dropEl.classList.add("drag-over");
+    })
+  );
+
   dropEl.addEventListener("dragleave", e => {
-    if (!dropEl.contains(e.relatedTarget)) dropEl.classList.remove("drag-over");});
+    if (!dropEl.contains(e.relatedTarget)) dropEl.classList.remove("drag-over");
+  });
+
   dropEl.addEventListener("dragend", () => dropEl.classList.remove("drag-over"));
+
   dropEl.addEventListener("drop", e => {
     e.preventDefault();
     dropEl.classList.remove("drag-over");
     const file = e.dataTransfer?.files?.[0];
     if (file && file.type.startsWith("image/")) {
-      assignFile(file, input, previewEl, nameEl);}});
+      assignFile(file, input, previewEl, nameEl);
+    }
+  });
 
   // Click on drop zone opens file picker
   dropEl.addEventListener("click", e => {
     if (e.target === input) return; // avoid double-trigger
-    input.click();});}
+    input.click();
+  });
+}
+
 setupDrop(dropSingle, image1,    preview1, fileName1);
 setupDrop(dropLeft,  imageLeft,  previewL, fileNameL);
 setupDrop(dropRight, imageRight, previewR, fileNameR);
@@ -92,11 +118,13 @@ modeRadios.forEach(r => r.addEventListener("change", updateModeUI));
 // ─── Loading steps ───────────────────────────────────────────
 
 const LOADING_STEPS = [
-  "Detecting sole boundary…",
-  "Mapping wear zones…",
-  "Computing texture metrics…",
-  "Generating insights…",];
+  "Finding the sole…",
+  "Mapping where it's worn…",
+  "Reading the texture…",
+  "Pulling it together…",
+];
 let _stepTimer = null;
+
 function startLoadingSteps() {
   const el = loading?.querySelector(".loadingText");
   if (!el) return;
@@ -104,14 +132,17 @@ function startLoadingSteps() {
   el.textContent = LOADING_STEPS[0];
   _stepTimer = setInterval(() => {
     i = (i + 1) % LOADING_STEPS.length;
-    el.textContent = LOADING_STEPS[i];}, 1500);}
+    el.textContent = LOADING_STEPS[i];
+  }, 1500);
+}
 
 // ─── Form submit ─────────────────────────────────────────────
 
 form?.addEventListener("submit", () => {
   if (analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.textContent = "Analyzing…"; }
   if (loading) loading.style.display = "flex";
-  startLoadingSteps();});
+  startLoadingSteps();
+});
 
 // ─── Metric bar animation ────────────────────────────────────
 
@@ -120,7 +151,10 @@ function animateBars() {
     const pct = parseFloat(bar.dataset.pct) || 0;
     bar.style.width = "0%";
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      bar.style.width = pct + "%";}));});}
+      bar.style.width = pct + "%";
+    }));
+  });
+}
 
 // ─── Chat ────────────────────────────────────────────────────
 
@@ -138,7 +172,8 @@ function appendMsg(role, text) {
   d.textContent = text;
   chatMessages.appendChild(d);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-  return d;}
+  return d;
+}
 
 async function sendChat(text) {
   if (!text.trim()) return;
@@ -160,7 +195,9 @@ async function sendChat(text) {
       body: JSON.stringify({
         message: text,
         context: window.SOLECHECK_CONTEXT || null,
-        history: chatHistory.slice(0, -1),}),});
+        history: chatHistory.slice(0, -1),
+      }),
+    });
     const data = await res.json();
     thinking?.remove();
     const reply = data.response || data.error || "No response.";
@@ -176,10 +213,12 @@ async function sendChat(text) {
 
 chatFormEl?.addEventListener("submit", e => {
   e.preventDefault();
-  sendChat(chatInput?.value?.trim() || "");});
+  sendChat(chatInput?.value?.trim() || "");
+});
 
 document.querySelectorAll(".chatSuggestion").forEach(btn => {
-  btn.addEventListener("click", () => sendChat(btn.dataset.q || ""));});
+  btn.addEventListener("click", () => sendChat(btn.dataset.q || ""));
+});
 
 // ─── Init ────────────────────────────────────────────────────
 
