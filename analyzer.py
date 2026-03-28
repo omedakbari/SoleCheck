@@ -1,11 +1,10 @@
-from __future__ import annotations
-from typing import Dict, Any, Tuple, Optional, List
+
 
 import numpy as np
 import cv2
 
 # ─── Tunables ────────────────────────────────────────────────────────────────
-MAX_SIDE         = 1100
+MAX_SIDE         = 800          # was 1100 — ~47% fewer pixels, much faster GrabCut
 BLUR_VAR_MIN     = 35.0
 DARK_MEAN_MIN    = 35.0
 BRIGHT_MEAN_MAX  = 220.0
@@ -103,7 +102,7 @@ def _grabcut_refine(bgr: np.ndarray, seed: np.ndarray) -> np.ndarray:
     bgd  = np.zeros((1, 65), np.float64)
     fgd  = np.zeros((1, 65), np.float64)
     try:
-        cv2.grabCut(bgr, gc, rect, bgd, fgd, 4, cv2.GC_INIT_WITH_RECT)
+        cv2.grabCut(bgr, gc, rect, bgd, fgd, 3, cv2.GC_INIT_WITH_RECT)
         fg = np.where((gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
         k  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
         fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN,  k, iterations=1)
@@ -127,12 +126,15 @@ def _sole_mask(bgr: np.ndarray, gray_c: np.ndarray) -> Tuple[np.ndarray, Dict[st
     else:
         seed, conf_seed, ch = ms, cs, "saturation"
 
-    refined    = _grabcut_refine(bgr, seed)
-    conf_final = _mask_confidence(refined)
-
-    if conf_final < conf_seed * 0.85:
-        refined    = seed
-        conf_final = conf_seed
+    # Only run GrabCut when the initial mask is uncertain — saves 0.5-1s on clear photos
+    refined    = seed
+    conf_final = conf_seed
+    if conf_seed < 0.45:
+        gc_result  = _grabcut_refine(bgr, seed)
+        gc_conf    = _mask_confidence(gc_result)
+        if gc_conf >= conf_seed * 0.85:
+            refined    = gc_result
+            conf_final = gc_conf
 
     return refined, {
         "mask_conf_gray":  round(cg,         3),
