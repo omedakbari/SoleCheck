@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 """
-SoleCheck analyzer — upgraded CV pipeline
-=========================================
-Improvements over v1:
+SoleCheck analyzer — CV pipeline
+=================================
   1. CLAHE preprocessing — adaptive contrast before every operation
   2. Multi-channel segmentation — Otsu on grayscale AND saturation, best mask wins
-  3. GrabCut always runs as a refinement pass (not just a fallback)
+  3. GrabCut refinement pass when segmentation confidence is below threshold
   4. Contour-fitted zones — heel/mid/fore split on actual bounding box, not fixed image %
-  5. Three-signal wear map — Laplacian + Sobel + HSV saturation (worn rubber loses colour)
-  6. Relaxed quality gate — blur threshold lowered so more real photos pass
-  7. Annotated overlay — zone boundary lines + labels drawn on the heatmap
-  8. INFERNO colourmap — more perceptually distinct than JET
+  5. Three-signal wear map — Laplacian (45%) + Sobel (30%) + HSV saturation (25%)
+  6. Annotated overlay — zone boundary lines + labels drawn on the heatmap
+  7. INFERNO colourmap — more perceptually distinct than JET
 """
 
 from typing import Dict, Any, Tuple, Optional, List
@@ -295,30 +293,52 @@ def _pick_shoes(activity: str, pronation_class: str) -> str:
 
     if activity == "running":
         if pronation_class == "overpronation":
-            return "You need a stability runner. Try the Brooks Adrenaline, ASICS Kayano, or HOKA Arahi."
+            return ("Look for a stability runner with a medial post — it physically limits the inward roll. "
+                    "Brooks Adrenaline GTS, ASICS Gel-Kayano, and HOKA Arahi are the three most proven options. "
+                    "All three run on the firmer side, so size up half if you have wide feet.")
         if pronation_class == "supination":
-            return "Go with a cushioned neutral shoe. The Brooks Glycerin, ASICS Cumulus, or Nike Invincible all work well."
-        return "A neutral daily trainer works for you. Look at the Nike Pegasus, ASICS Novablast, or Saucony Ride."
+            return ("Your foot rolls outward, so you need max cushioning with a curved last, not a stability shoe. "
+                    "Brooks Glycerin, ASICS Gel-Cumulus, and Nike Invincible Run absorb impact without adding structure. "
+                    "Calf and ankle mobility work between runs will help long-term.")
+        return ("A neutral daily trainer is the right call. Nike Pegasus, ASICS Novablast, and Saucony Ride 17 "
+                "all hold up well across different surfaces and hit different price points. "
+                "Replace around 400 miles or when the midsole starts feeling flat.")
 
     if activity == "basketball":
         if pronation_class == "overpronation":
-            return "Pick a supportive hoop shoe with a snug fit. The Nike LeBron and KD lines hold up well. Consider an orthotic too."
+            return ("Court shoes with lateral ankle support and a snug midfoot are your best bet. "
+                    "Nike LeBron 21 and KD 17 both have wide bases that limit roll on cuts. "
+                    "A supportive insole like Superfeet Green will help more than most shoe upgrades.")
         if pronation_class == "supination":
-            return "You want extra cushion underfoot. Try the Nike GT Jump or Jordan Zion line. Work on ankle mobility on the side."
-        return "A balanced court shoe fits your pattern. The Nike GT Cut gives you good torsional support."
+            return ("You need cushioning underfoot more than ankle support. "
+                    "Nike GT Jump 2 and Jordan Zion 3 have softer midsoles that absorb impact on your outside edge. "
+                    "Add ankle stability exercises to your warmup — that edge-loading pattern puts you at sprain risk.")
+        return ("Any well-cushioned court shoe with torsional rigidity works for your pattern. "
+                "Nike GT Cut 3 is the current benchmark for balance of cushion and lateral lockdown.")
 
     if activity == "training":
         if pronation_class == "overpronation":
-            return "A stable trainer keeps you locked in. Try the Nike Metcon or Reebok Nano. Add a supportive insole if needed."
+            return ("A flat, stable trainer with a firm base works better than cushioned here — "
+                    "too much softness under a pronating foot makes lateral movements unpredictable. "
+                    "Nike Metcon 9 and Reebok Nano X4 are the two most popular options. Add a supportive insole if needed.")
         if pronation_class == "supination":
-            return "Get a trainer with a softer midsole. Focus on ankle mobility work between sessions."
-        return "Any solid cross trainer works here. Nike Metcon, Reebok Nano, or Adidas Dropset are all good."
+            return ("Get a training shoe with a softer, more forgiving midsole than the typical stiff gym shoe. "
+                    "New Balance Minimus Trail or Adidas Dropset 3 both have more cushion than the Metcon/Nano category. "
+                    "Work ankle circles and single-leg balance into your warmup.")
+        return ("A standard cross trainer fits you well. Nike Metcon 9, Reebok Nano X4, and Adidas Dropset 3 "
+                "all give you the flat, stable base you need for lifting without sacrificing too much on cardio days.")
 
     if pronation_class == "overpronation":
-        return "A stability walking shoe helps correct the inward roll. Try the ASICS GT 2000, Brooks Adrenaline, or add a supportive insole."
+        return ("A stability walking shoe with arch support is the right move. "
+                "ASICS GT-2000 13, Brooks Adrenaline GTS, and New Balance 860 are all solid picks with medial support built in. "
+                "If you spend a lot of time on hard floors, a supportive insole like Superfeet Blue adds meaningful correction.")
     if pronation_class == "supination":
-        return "Get something with serious cushioning. The HOKA Bondi, Brooks Glycerin, or ASICS Cumulus all absorb impact well."
-    return "Your foot works well in a neutral shoe. The Brooks Ghost, Nike Pegasus, or ASICS Cumulus are solid picks."
+        return ("Prioritize cushioning over structure. HOKA Bondi 9, Brooks Glycerin 22, and ASICS Gel-Cumulus "
+                "all have thick midsoles that absorb impact without adding the arch structure you don't need. "
+                "Avoid minimalist or stability shoes.")
+    return ("Your foot pattern is neutral, so you have a lot of flexibility. "
+            "Brooks Ghost 16, Nike Pegasus 41, and ASICS Gel-Cumulus all work well and are available at different price points. "
+            "Focus on fit over any specific support category.")
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -375,8 +395,13 @@ def analyze_single(
     fore_tex  = _masked_mean(lap_tex[:y_fore_end,            :], mask[:y_fore_end,            :])
     mid_tex   = _masked_mean(lap_tex[y_fore_end:y_heel_start,:], mask[y_fore_end:y_heel_start,:])
     heel_tex  = _masked_mean(lap_tex[y_heel_start:,          :], mask[y_heel_start:,          :])
-    left_tex  = _masked_mean(lap_tex[:, :w//2],                  mask[:, :w//2])
-    right_tex = _masked_mean(lap_tex[:, w//2:],                  mask[:, w//2:])
+
+    # Split on the contour centroid, not the image midpoint, so an off-center photo
+    # doesn't flip the medial/lateral labels.
+    _mask_xs = np.where(mask > 0)[1]
+    cx = int(_mask_xs.mean()) if _mask_xs.size > 0 else w // 2
+    left_tex  = _masked_mean(lap_tex[:, :cx], mask[:, :cx])
+    right_tex = _masked_mean(lap_tex[:, cx:], mask[:, cx:])
 
     fore_w  = _wear_score(fore_tex)
     heel_w  = _wear_score(heel_tex)
@@ -447,7 +472,6 @@ def analyze_single(
         "right_texture":        round(right_tex,      1),
     }
     if shoe_side in ("left", "right"):
-        ml_ratio = medial_w / (lateral_w + EPS)
         metrics.update({
             "medial_texture":            round(medial_tex, 1),
             "lateral_texture":           round(lateral_tex,1),

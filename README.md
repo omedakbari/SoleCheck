@@ -35,17 +35,18 @@ The analysis runs entirely on the server with no ML model — just classical com
 Laplacian variance flags blurry images. Mean brightness catches photos that are too dark or overexposed.
 
 **2. Sole segmentation**
-Otsu thresholding on a Gaussian-blurred grayscale image separates the sole from the background. If the initial mask covers less than 25% of the frame (low confidence), GrabCut refines it using the bounding box as a seed rectangle. The largest contour is kept.
+Otsu thresholding runs on both the grayscale channel and the HSV saturation channel; the higher-confidence mask wins. If segmentation confidence is below 0.45, GrabCut refines it using the bounding box as a seed rectangle. The largest contour is kept.
 
 **3. Rotation normalization**
 `minAreaRect` finds the minimum bounding rectangle of the sole contour. The image rotates so the sole sits vertically, giving consistent top/bottom/left/right orientation for every photo.
 
 **4. Wear scoring**
-Two signals combine to estimate wear:
-- Laplacian magnitude (low texture = smoother = more worn)
-- Sobel gradient magnitude (low gradient = flatter surface)
+Three signals combine to estimate wear:
+- Laplacian magnitude (45% weight) — low texture = smoother = more worn
+- Sobel gradient magnitude (30% weight) — low gradient = flatter surface
+- HSV saturation (25% weight) — worn rubber loses colour
 
-Both are normalized within the sole mask and blended 60/40. The result is a per-pixel wear map rendered as a JET colormap overlay.
+All three are normalized within the sole mask and blended. The result is a per-pixel wear map rendered as an INFERNO colormap overlay.
 
 **5. Zone classification**
 The sole splits into three horizontal bands: forefoot (top 30%), midfoot (30–70%), heel (bottom 70–100%), and two lateral halves. Regional texture means convert to wear scores. Ratios between zones determine heel/forefoot strike tendency and medial/lateral pronation class.

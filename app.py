@@ -2,13 +2,14 @@ import os
 import io
 import json
 import csv
+import base64
 import time
 import hashlib
 import zipfile
 import urllib.request
 import urllib.error
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple
 
 from flask import Flask, request, render_template, send_file, abort
@@ -23,6 +24,10 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 Image.MAX_IMAGE_PIXELS = 25_000_000
 
 app = Flask(__name__)
+
+@app.context_processor
+def inject_globals():
+    return {"chat_enabled": bool(os.environ.get("ANTHROPIC_API_KEY"))}
 
 # ----------------------------
 # LRU cache
@@ -78,7 +83,12 @@ def _load_sample(name: str) -> Optional[Image.Image]:
     path = os.path.join(SAMPLES_DIR, name)
     if not os.path.exists(path):
         return None
-    return Image.open(path)
+    try:
+        img = Image.open(path)
+        img.load()
+        return img
+    except Exception:
+        return None
 
 
 def _sha(raw: bytes) -> str:
@@ -130,7 +140,7 @@ def sample():
         "result": result,
         "overlay_left_png": overlay_png,
         "overlay_right_png": None,
-        "created": datetime.utcnow().isoformat() + "Z",
+        "created": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z',
     }
     _cache_set(rid, payload)
 
@@ -161,7 +171,7 @@ def sample_pair():
         "pair": out["pair"],
         "overlay_left_png": out["left_overlay_png"],
         "overlay_right_png": out["right_overlay_png"],
-        "created": datetime.utcnow().isoformat() + "Z",
+        "created": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z',
     }
     _cache_set(rid, payload)
 
@@ -201,7 +211,7 @@ def analyze():
                     "result": result,
                     "overlay_left_png": overlay_png,
                     "overlay_right_png": None,
-                    "created": datetime.utcnow().isoformat() + "Z",
+                    "created": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z',
                     "hash_left": h,
                     "hash_right": "",
                 })
@@ -210,7 +220,7 @@ def analyze():
 
         view = _build_view_from_cache(rid)
         res = view["single"]
-        _log_request([datetime.utcnow().isoformat() + "Z", "single", activity, weekly_miles, surface, h, "", res.get("pattern", ""), "", res.get("ok", False), ""])
+        _log_request([datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z', "single", activity, weekly_miles, surface, h, "", res.get("pattern", ""), "", res.get("ok", False), ""])
         return render_template("index.html", error=None, view=view)
 
     # pair
@@ -237,7 +247,7 @@ def analyze():
                 "pair": out["pair"],
                 "overlay_left_png": out["left_overlay_png"],
                 "overlay_right_png": out["right_overlay_png"],
-                "created": datetime.utcnow().isoformat() + "Z",
+                "created": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z',
                 "hash_left": hL,
                 "hash_right": hR,
             })
@@ -247,7 +257,7 @@ def analyze():
     view = _build_view_from_cache(rid)
     pair = view["pair"]
     pair_metrics = pair.get("pair_metrics", {}) or {}
-    _log_request([datetime.utcnow().isoformat() + "Z", "pair", activity, weekly_miles, surface, hL, hR, pair.get("left", {}).get("pattern", ""), pair.get("right", {}).get("pattern", ""), pair.get("ok", False), pair_metrics.get("asymmetry_score_0_1", "")])
+    _log_request([datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f') + 'Z', "pair", activity, weekly_miles, surface, hL, hR, pair.get("left", {}).get("pattern", ""), pair.get("right", {}).get("pattern", ""), pair.get("ok", False), pair_metrics.get("asymmetry_score_0_1", "")])
     return render_template("index.html", error=None, view=view)
 
 
@@ -255,12 +265,46 @@ def analyze():
 # AI Chat endpoint
 # ----------------------------
 
+def _readable_context(context: dict) -> str:
+    if not context:
+        return "No analysis context available."
+
+    lines = []
+    if "pattern" in context:
+        lines.append(f"Wear pattern: {context.get('pattern', 'unknown')}")
+        lines.append(f"Confidence: {int(context.get('confidence', 0) * 100)}%")
+        if context.get("summary"):
+            lines.append(f"Observations: {context['summary']}")
+        if context.get("recommendation"):
+            lines.append(f"Recommendation: {context['recommendation']}")
+        if context.get("shoes"):
+            lines.append(f"Shoe suggestions: {context['shoes']}")
+        m = context.get("metrics", {})
+        if m:
+            lines.append(f"Activity: {m.get('activity', 'unknown')}, surface: {m.get('surface', 'unknown')}, weekly miles: {m.get('weekly_miles', 'unknown')}")
+            lines.append(f"Strike pattern: {m.get('strike_hint', 'unknown')}, heel/fore ratio: {m.get('heel_fore_wear_ratio', '?')}")
+            if "medial_lateral_wear_ratio" in m:
+                lines.append(f"Medial/lateral ratio: {m['medial_lateral_wear_ratio']}")
+    else:
+        for side in ("left", "right"):
+            s = context.get(side, {})
+            if s:
+                lines.append(f"{side.capitalize()} shoe — pattern: {s.get('pattern', 'unknown')} ({int(s.get('confidence', 0)*100)}% confidence)")
+                if s.get("summary"):
+                    lines.append(f"  Observations: {s['summary']}")
+                if s.get("recommendation"):
+                    lines.append(f"  Recommendation: {s['recommendation']}")
+        if context.get("pair_summary"):
+            lines.append(f"Pair comparison: {context['pair_summary']}")
+        pm = context.get("pair_metrics", {})
+        if pm.get("asymmetry_score_0_1") is not None:
+            lines.append(f"Asymmetry score: {int(float(pm['asymmetry_score_0_1']) * 100)}%")
+
+    return "\n".join(lines)
+
+
 @app.post("/chat")
 def chat():
-    """
-    Answers questions about a completed analysis using Claude.
-    Requires ANTHROPIC_API_KEY environment variable.
-    """
     body = request.get_json(silent=True) or {}
     message = (body.get("message") or "").strip()
     context = body.get("context") or {}
@@ -268,12 +312,14 @@ def chat():
 
     if not message:
         return {"error": "No message provided."}, 400
+    if len(message) > 500:
+        return {"error": "Message too long (max 500 characters)."}, 400
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {"error": "AI chat is not enabled on this deployment."}, 503
 
-    ctx_str = json.dumps(context, indent=2) if context else "No analysis context available."
+    ctx_str = _readable_context(context)
 
     system = (
         "You are SoleCheck AI. You know biomechanics, gait, and footwear well.\n"
@@ -293,7 +339,7 @@ def chat():
     claude_msgs.append({"role": "user", "content": message})
 
     payload = json.dumps({
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 350,
         "system": system,
         "messages": claude_msgs,
@@ -328,7 +374,6 @@ def chat():
 def _b64_png(png_bytes: Optional[bytes]) -> Optional[str]:
     if not png_bytes:
         return None
-    import base64
     return base64.b64encode(png_bytes).decode("ascii")
 
 

@@ -30,6 +30,9 @@ const dropRight  = document.getElementById("dropRight");
 
 function setPreview(file, previewEl, nameEl) {
   if (!file) return;
+  if (previewEl.src && previewEl.src.startsWith("blob:")) {
+    URL.revokeObjectURL(previewEl.src);
+  }
   nameEl.textContent = file.name;
   previewEl.src = URL.createObjectURL(file);
   previewEl.classList.add("show");
@@ -70,6 +73,8 @@ function setupDrop(dropEl, input, previewEl, nameEl) {
   if (!dropEl || !input) return;
 
   dropEl.style.cursor = "pointer";
+  dropEl.setAttribute("tabindex", "0");
+  dropEl.setAttribute("role", "button");
   dropEl.title = "Drag an image here, or click to browse";
 
   ["dragenter", "dragover"].forEach(evt =>
@@ -98,6 +103,14 @@ function setupDrop(dropEl, input, previewEl, nameEl) {
   dropEl.addEventListener("click", e => {
     if (e.target === input) return; // avoid double-trigger
     input.click();
+  });
+
+  // Keyboard: Enter or Space opens file picker
+  dropEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      input.click();
+    }
   });
 }
 

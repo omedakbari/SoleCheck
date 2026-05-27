@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SoleCheck — Demo</title>
+  <title>SoleCheck — Outsole Wear Analysis</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
     #wakeBar{
@@ -43,9 +43,9 @@
   <div class="container">
     <div id="wakeBar">
       <div class="spinner"></div>
-      <span>Server is waking up — this takes about 30 seconds on the free tier. Hang tight.</span>
+      <span>Server is waking up — should be ready in about 30 seconds.</span>
     </div>
-    <div class="nav">
+    <nav class="nav">
       <div class="brand">
         <div class="logo"></div>
         <div>SoleCheck</div>
@@ -53,9 +53,9 @@
       <div class="pills">
         <div class="pill">Privacy-first</div>
         <div class="pill">No login</div>
-        <div class="pill">Recruiter Demo</div>
+        <div class="pill">Free</div>
       </div>
-    </div>
+    </nav>
 
     <div class="hero">
       <!-- Left: pitch -->
@@ -75,7 +75,7 @@
           </div>
 
           <div class="footer">
-            <div>Tip: Samples work great for recruiters without shoe photos.</div>
+            <div>No photos? Try the sample to see how it works.</div>
             <div>© SoleCheck</div>
           </div>
         </div>
@@ -117,9 +117,9 @@
       <!-- Right: demo -->
       <div class="card" id="demo">
         <div class="cardHeader">
-          <h2 style="margin:10px 0 6px; font-size:18px;">Live Demo</h2>
+          <h2 style="margin:10px 0 6px; font-size:18px;">Analyze your shoe</h2>
           <p class="sub" style="margin-bottom:10px;">
-            Drop a photo of your sole below. Or click the zone to browse your files.
+            Drop a photo of your outsole below, or click to browse.
           </p>
         </div>
 
@@ -427,7 +427,7 @@
           </form>
 
           <!-- ─── AI Chat Panel (shown after results) ────────────── -->
-          {% if view %}
+          {% if view and chat_enabled %}
           <div class="chatPanel" id="chatPanel">
             <div class="chatHeader">
               <span class="chatDot"></span>
@@ -445,7 +445,7 @@
               <button class="chatSuggestion" data-q="What exercises would help fix this?">What exercises help?</button>
             </div>
             <form id="chatForm" class="chatInputRow">
-              <input id="chatInput" class="chatInput" type="text" placeholder="Type your question…" autocomplete="off" />
+              <input id="chatInput" class="chatInput" type="text" placeholder="Type your question…" autocomplete="off" maxlength="500" />
               <button id="chatSend" class="btn btnPrimary" type="submit" style="padding:9px 14px; font-size:13px;">Send</button>
             </form>
           </div>
