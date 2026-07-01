@@ -73,8 +73,8 @@ No PyTorch. No TensorFlow. No pretrained model. The pipeline is hand-built using
 ## Run it locally
 
 ```bash
-git clone https://github.com/your-username/solecheck
-cd solecheck
+git clone https://github.com/omedakbari/SoleCheck
+cd SoleCheck
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -102,8 +102,6 @@ solecheck/
 │   ├── styles.css
 │   ├── app.js      # Drag-and-drop, loading steps, async chat
 │   └── samples/    # Sample shoe images for the demo buttons
-├── data/
-│   └── requests.csv  # Privacy-safe log: metrics only, no images stored
 └── requirements.txt
 ```
 
